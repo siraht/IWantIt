@@ -26,6 +26,45 @@ The pipeline runs in two phases:
 
 All steps are configured in YAML. You can replace any step with your own command.
 
+## Diagrams
+### Index
+- [End-to-end overview](#end-to-end-overview)
+- [Pre-steps detail](#pre-steps-detail)
+- [Music workflow](#music-workflow)
+- [Book workflow](#book-workflow)
+- [Movie and TV workflow](#movie-and-tv-workflow)
+- [Decision and dispatch logic](#decision-and-dispatch-logic)
+
+### End-to-end overview
+![End-to-end overview](docs/diagrams/rendered/flow-overview.png)
+
+Sources: `docs/diagrams/flow-overview.mmd` and `docs/diagrams/rendered/flow-overview.svg`.
+
+### Pre-steps detail
+![Pre-steps detail](docs/diagrams/rendered/pre-steps.png)
+
+Sources: `docs/diagrams/pre-steps.mmd` and `docs/diagrams/rendered/pre-steps.svg`.
+
+### Music workflow
+![Music workflow](docs/diagrams/rendered/music-workflow.png)
+
+Sources: `docs/diagrams/music-workflow.mmd` and `docs/diagrams/rendered/music-workflow.svg`.
+
+### Book workflow
+![Book workflow](docs/diagrams/rendered/book-workflow.png)
+
+Sources: `docs/diagrams/book-workflow.mmd` and `docs/diagrams/rendered/book-workflow.svg`.
+
+### Movie and TV workflow
+![Movie and TV workflow](docs/diagrams/rendered/movie-tv-workflow.png)
+
+Sources: `docs/diagrams/movie-tv-workflow.mmd` and `docs/diagrams/rendered/movie-tv-workflow.svg`.
+
+### Decision and dispatch logic
+![Decision and dispatch logic](docs/diagrams/rendered/decision-and-dispatch.png)
+
+Sources: `docs/diagrams/decision-and-dispatch.mmd` and `docs/diagrams/rendered/decision-and-dispatch.svg`.
+
 ## Quick start
 ```bash
 iwantit init
@@ -245,4 +284,3 @@ pip install -e .
 - Prowlarr and Redacted have rate limits. The Redacted API allows ~10 requests/10s with API keys.
 - Always respect tracker rules and terms of service.
 - This tool is meant for personal automation; you control which indexers and download clients are used.
-
