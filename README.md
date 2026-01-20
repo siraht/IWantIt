@@ -144,6 +144,8 @@ iwantit validate
 Notes:
 - `iwantit run` returns exit code **20** when `decision.status = needs_choice`.
 - `iwantit choose` can emit `--choice N` flags for reruns.
+- URLs are auto-detected (CLI args, stdin, or JSON input) and treated as `--url`.
+- CLI output is compacted by default; use `--full` to emit full JSON.
 - Progress messages are written to stderr; use `--quiet` to suppress.
 
 ## Output shape

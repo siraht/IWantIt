@@ -30,6 +30,55 @@ from .util import (
 )
 
 EXIT_NEEDS_CHOICE = 20
+_COMPACT_LIST_KEYS = {"results", "candidates", "options"}
+_COMPACT_ITEM_KEYS = [
+    "title",
+    "name",
+    "release",
+    "artist",
+    "authors",
+    "author",
+    "label",
+    "year",
+    "date",
+    "url",
+    "link",
+    "guid",
+    "id",
+    "indexer",
+    "indexerId",
+    "snippet",
+    "description",
+    "summary",
+    "size",
+    "seeders",
+    "leechers",
+    "peers",
+    "category",
+    "categories",
+    "format",
+    "bitrate",
+    "quality",
+    "media_type",
+    "type",
+    "language",
+    "codec",
+    "edition",
+    "tags",
+    "score",
+    "rank",
+    "imdb",
+    "tmdb",
+    "tvdb",
+    "season",
+    "episode",
+    "magnet",
+    "downloadUrl",
+    "tracker",
+    "infoHash",
+    "group_id",
+    "torrent_id",
+]
 
 
 def _load_json_file(path: str) -> dict[str, Any]:
@@ -67,6 +116,74 @@ def _finalize_output(data: Any) -> dict[str, Any]:
     if data.get("error") and data["decision"].get("status") != "error":
         data["decision"]["status"] = "error"
     return data
+
+
+def _slim_categories(value: Any) -> Any:
+    if not isinstance(value, list):
+        return value
+    slimmed = []
+    for item in value:
+        if not isinstance(item, dict):
+            slimmed.append(item)
+            continue
+        out: dict[str, Any] = {}
+        if "id" in item:
+            out["id"] = item.get("id")
+        if "name" in item:
+            out["name"] = item.get("name")
+        if out:
+            slimmed.append(out)
+        else:
+            slimmed.append(item)
+    return slimmed
+
+
+def _slim_item(item: Any) -> Any:
+    if not isinstance(item, dict):
+        return item
+    out: dict[str, Any] = {}
+    for key in _COMPACT_ITEM_KEYS:
+        if key not in item:
+            continue
+        value = item.get(key)
+        if value in (None, "", [], {}):
+            continue
+        if key == "rank" and isinstance(value, dict):
+            rank_out: dict[str, Any] = {}
+            if "score" in value:
+                rank_out["score"] = value.get("score")
+            if "reason" in value:
+                rank_out["reason"] = value.get("reason")
+            if rank_out:
+                out[key] = rank_out
+            continue
+        if key == "categories":
+            out[key] = _slim_categories(value)
+            continue
+        out[key] = value
+    if out:
+        return out
+    fallback: dict[str, Any] = {}
+    for key, value in item.items():
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            fallback[key] = value
+        if len(fallback) >= 6:
+            break
+    return fallback or item
+
+
+def _compact_output(value: Any) -> Any:
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for key, val in value.items():
+            if isinstance(val, list) and key in _COMPACT_LIST_KEYS:
+                out[key] = [_slim_item(item) for item in val]
+                continue
+            out[key] = _compact_output(val)
+        return out
+    if isinstance(value, list):
+        return [_compact_output(item) for item in value]
+    return value
 
 
 def _build_request(args: argparse.Namespace) -> dict[str, Any]:
@@ -193,6 +310,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         result.pop("_meta", None)
         result.pop("_config_path", None)
     result = _finalize_output(result)
+    if not args.full:
+        result = _compact_output(result)
     write_json(result)
     if result.get("error"):
         return 1
@@ -217,7 +336,10 @@ def cmd_step(args: argparse.Namespace) -> int:
         result = step(data, step_cfg, context)
     except Exception as exc:
         result = {"error": {"message": str(exc), "step": args.name, "type": exc.__class__.__name__}}
-    write_json(_finalize_output(result))
+    output = _finalize_output(result)
+    if not args.full:
+        output = _compact_output(output)
+    write_json(output)
     return 0 if not result.get("error") else 1
 
 
@@ -319,7 +441,10 @@ def cmd_choose(args: argparse.Namespace) -> int:
         work = data.setdefault("work", {})
         work["selected"] = options[idx]
         data["decision"] = {"status": "selected", "selected": options[idx], "index": idx}
-        write_json(_finalize_output(data))
+        output = _finalize_output(data)
+        if not args.full:
+            output = _compact_output(output)
+        write_json(output)
         return 0
     if args.emit == "flag":
         sys.stdout.write(f"--choice {idx}\n")
@@ -366,6 +491,11 @@ def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--config", help="Path to config file")
     common.add_argument("--quiet", action="store_true", help="Suppress progress output")
+    common.add_argument(
+        "--full",
+        action="store_true",
+        help="Show full JSON output (disable compact result arrays)",
+    )
 
     input_group = argparse.ArgumentParser(add_help=False)
     source = input_group.add_mutually_exclusive_group()
