@@ -160,6 +160,8 @@ def default_config() -> dict[str, Any]:
                     "flac": ["flac", "lossless"],
                     "v0": ["v0"],
                     "320": ["320", "320kbps", "320k"],
+                    "audiobook": ["audiobook", "audio book", "audible", "m4b", "aax"],
+                    "ebook": ["ebook", "e-book", "epub", "mobi", "azw", "azw3", "pdf", "kindle"],
                 },
             },
             "redacted_enrich": {
@@ -212,7 +214,6 @@ def default_config() -> dict[str, Any]:
             },
             "dispatch_radarr": {"builtin": "arr_dispatch", "arr": "radarr"},
             "dispatch_sonarr": {"builtin": "arr_dispatch", "arr": "sonarr"},
-            "dispatch_readarr": {"builtin": "arr_dispatch", "arr": "readarr"},
             "store_tags": {"builtin": "store_tags"},
         },
         "music_tracker": {
@@ -300,6 +301,9 @@ def default_config() -> dict[str, Any]:
                     },
                 }
             },
+        },
+        "book": {
+            "default_format": "both",
         },
         "quality_rules": {
             "music": {
@@ -457,13 +461,6 @@ def default_config() -> dict[str, Any]:
                 "root_folder": "/media/tv",
                 "quality_profile_id": 1,
                 "endpoint": "/api/v3/series",
-            },
-            "readarr": {
-                "url": "http://localhost:8787",
-                "api_key": "CHANGE_ME",
-                "root_folder": "/media/books",
-                "quality_profile_id": 1,
-                "endpoint": "/api/v1/book",
             },
         },
         "timeouts": {},

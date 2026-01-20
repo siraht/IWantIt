@@ -7,7 +7,7 @@ works well in pipelines, and keeps side effects (downloads) isolated to explicit
 This repo currently focuses on:
 - Music search + downloads via Prowlarr (and Redacted enrichment)
 - Movies/TV dispatch to Radarr/Sonarr
-- Books via Prowlarr (Readarr integration can be wired the same way)
+- Books via Prowlarr
 - Strong defaults for query cleanup, media type detection, and scoring
 
 ## How it works (mental model)
@@ -65,6 +65,22 @@ Sources: `docs/diagrams/movie-tv-workflow.mmd` and `docs/diagrams/rendered/movie
 
 Sources: `docs/diagrams/decision-and-dispatch.mmd` and `docs/diagrams/rendered/decision-and-dispatch.svg`.
 
+## Install (uv)
+Install uv first (see https://astral.sh/uv).
+
+### User install (recommended)
+```bash
+uv tool install .
+```
+This keeps dependencies isolated and exposes `iwantit` on your PATH (uv will print the bin dir).
+
+### Development
+```bash
+uv venv
+source .venv/bin/activate
+uv pip install -e .
+```
+
 ## Quick start
 ```bash
 iwantit init
@@ -82,8 +98,8 @@ iwantit run --url "https://www.youtube.com/watch?v=naD6-V5CLk0" --dry-run
 ## CLI commands
 ```bash
 iwantit init [--force]
-iwantit run [--text|--url|--image|--json|--stdin] [--workflow name] [--dry-run]
-iwantit step <step-name> [--text|--url|--image|--json|--stdin]
+iwantit run [--text|--url|--image|--json|--stdin] [--workflow name] [--dry-run] [--book-format ebook|audiobook|both]
+iwantit step <step-name> [--text|--url|--image|--json|--stdin] [--book-format ebook|audiobook|both]
 iwantit choose [--json|--stdin] [--interactive] [--select <idx|substring>]
 iwantit list workflows|steps
 iwantit validate
@@ -221,6 +237,15 @@ steps:
     min_token_matches: 2
 ```
 
+### Book format decision
+`book_decide` filters book results when the user specifies a format:
+- Query keywords like `audiobook`, `ebook`, `epub`, `m4b` are detected.
+- You can also pass `--pref book_format=ebook` or `--pref book_format=audiobook`.
+- The default can be set in config via `book.default_format` (ebook, audiobook, or both).
+
+If a format is specified, candidates are filtered to that type; otherwise, all
+results remain and the decision step handles selection.
+
 ## Redacted enrichment
 When a candidate is from Redacted, `redacted_enrich` pulls group/torrent metadata
 using the Redacted JSON API. This is used for ranking and for track/album resolution.
@@ -273,12 +298,6 @@ steps:
 ```
 
 Global defaults can be set with `timeouts` and `retries` in config.
-
-## Development
-Install locally:
-```bash
-pip install -e .
-```
 
 ## Safety notes
 - Prowlarr and Redacted have rate limits. The Redacted API allows ~10 requests/10s with API keys.

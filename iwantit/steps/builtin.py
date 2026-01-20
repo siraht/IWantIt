@@ -2336,7 +2336,134 @@ def decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> 
 
 
 def book_decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> dict[str, Any]:
-    """Placeholder for future book format decision logic."""
+    request = data.get("request", {}) or {}
+    work = data.get("work", {}) or {}
+    candidates = work.get("candidates", []) or []
+    if not candidates:
+        return data
+
+    def normalize_values(value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            values = value
+        else:
+            values = [value]
+        tokens: list[str] = []
+        for item in values:
+            if item is None:
+                continue
+            parts = re.split(r"[,+/]", str(item))
+            for part in parts:
+                token = part.strip().lower()
+                if token:
+                    tokens.append(token)
+        return tokens
+
+    preference = request.get("preferences", {}) or {}
+    prefs_formats = []
+    for key in ("book_format", "format", "formats"):
+        if key in preference:
+            prefs_formats.extend(normalize_values(preference.get(key)))
+
+    release_prefs = request.get("release_preferences", {}) or {}
+    prefs_formats.extend(normalize_values(release_prefs.get("formats")))
+    prefs_formats.extend(normalize_values(release_prefs.get("media")))
+
+    format_map = {
+        "audiobook": "audiobook",
+        "audiobooks": "audiobook",
+        "audio": "audiobook",
+        "audio book": "audiobook",
+        "audible": "audiobook",
+        "m4b": "audiobook",
+        "mp3": "audiobook",
+        "aax": "audiobook",
+        "aac": "audiobook",
+        "ogg": "audiobook",
+        "ebook": "ebook",
+        "ebooks": "ebook",
+        "e-book": "ebook",
+        "e book": "ebook",
+        "epub": "ebook",
+        "mobi": "ebook",
+        "azw": "ebook",
+        "azw3": "ebook",
+        "pdf": "ebook",
+        "kindle": "ebook",
+        "both": "both",
+        "all": "both",
+    }
+    desired = {format_map.get(item, "") for item in prefs_formats}
+    desired.discard("")
+    if "both" in desired:
+        desired = {"audiobook", "ebook"}
+
+    title_fields = step_cfg.get("title_fields") or [
+        "title",
+        "name",
+        "_raw.title",
+        "_raw.name",
+        "releaseTitle",
+        "release_title",
+    ]
+
+    def detect_formats(candidate: dict[str, Any]) -> set[str]:
+        text = _get_candidate_text(candidate, title_fields).lower()
+        formats: set[str] = set()
+        if re.search(r"\b(audiobook|audio book|audible)\b", text):
+            formats.add("audiobook")
+        if re.search(r"\b(m4b|mp3|aax|aac|ogg)\b", text) and "ebook" not in text:
+            formats.add("audiobook")
+        if re.search(r"\b(ebook|e-book|epub|mobi|azw3?|pdf|kindle)\b", text):
+            formats.add("ebook")
+        return formats
+
+    enriched: list[dict[str, Any]] = []
+    for cand in candidates:
+        if isinstance(cand, dict):
+            candidate = dict(cand)
+        else:
+            candidate = {"title": str(cand)}
+        formats = detect_formats(candidate)
+        if formats:
+            derived = candidate.get("derived")
+            if isinstance(derived, dict):
+                if "book_formats" not in derived:
+                    derived["book_formats"] = sorted(formats)
+            else:
+                candidate["derived"] = {"book_formats": sorted(formats)}
+        enriched.append(candidate)
+
+    if not desired:
+        default_format = (context.config.get("book") or {}).get("default_format")
+        if default_format:
+            desired = {format_map.get(default_format, default_format)}
+            desired.discard("")
+            if "both" in desired:
+                desired = {"audiobook", "ebook"}
+        if not desired:
+            work["candidates"] = enriched
+            data["work"] = work
+            return data
+
+    matched = []
+    for candidate in enriched:
+        formats = set(candidate.get("derived", {}).get("book_formats") or [])
+        if formats and formats.intersection(desired):
+            matched.append(candidate)
+
+    data.setdefault("filter", {})["book_format"] = {
+        "requested": sorted(desired),
+        "matched": len(matched),
+        "total": len(enriched),
+    }
+
+    if matched:
+        work["candidates"] = matched
+    else:
+        work["candidates"] = enriched
+    data["work"] = work
     return data
 
 

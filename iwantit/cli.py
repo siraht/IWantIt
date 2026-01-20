@@ -93,7 +93,10 @@ def _build_request(args: argparse.Namespace) -> dict[str, Any]:
         request["media_type"] = args.media_type
 
     request["tags"] = coerce_tags(args.tag)
-    request["preferences"] = parse_kv_pairs(args.pref)
+    prefs = parse_kv_pairs(args.pref)
+    if getattr(args, "book_format", None):
+        prefs["book_format"] = args.book_format
+    request["preferences"] = prefs
 
     return {"request": request}
 
@@ -307,6 +310,11 @@ def build_parser() -> argparse.ArgumentParser:
     input_group.add_argument("--media-type", help="media type (music, movie, tv, book)")
     input_group.add_argument("--tag", action="append", help="Tag to attach", default=[])
     input_group.add_argument("--pref", action="append", help="Preference key=value", default=[])
+    input_group.add_argument(
+        "--book-format",
+        choices=["ebook", "audiobook", "both"],
+        help="Book format preference (ebook, audiobook, or both)",
+    )
     input_group.add_argument("--choice", type=int, help="Choice index for selection")
     input_group.add_argument("--dry-run", action="store_true", help="Do not perform network side effects")
     input_group.add_argument("--from", dest="from_step", help="Start from this step name")
