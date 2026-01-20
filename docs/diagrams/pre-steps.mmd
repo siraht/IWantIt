@@ -1,0 +1,37 @@
+flowchart TD
+    A[Input arrives] --> B{input_type}
+
+    B -->|image| C[ocr]
+    B -->|url| D[fetch_url]
+    B -->|text| E[identify]
+    B -->|json| E
+
+    C --> E
+    D --> E
+
+    E --> F[identify_web_search]
+    F --> G[extract_release_preferences]
+    G --> H[determine_media_type]
+    H --> I{music track-like?}
+    I -->|no| J[continue]
+    I -->|yes| K[resolve_track_release]
+    K --> J
+
+    subgraph identify_web_search details
+        F1["Select query fields<br/>(artist/title/year or raw query)"]
+        F2["Search provider<br/>(Kagi or Brave)"]
+        F3[Map + filter results]
+        F4["Consensus: fix typos<br/>and refine query"]
+        F1 --> F2 --> F3 --> F4
+    end
+
+    subgraph resolve_track_release details
+        K1[Score track vs album intent]
+        K2[Try album from web results]
+        K3["If needed: Redacted browse<br/>(filelist + artist search)"]
+        K4["Rewrite request.query<br/>Artist - Album (Year)"]
+        K1 --> K2 --> K3 --> K4
+    end
+
+    F --> F1
+    K --> K1

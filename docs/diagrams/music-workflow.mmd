@@ -1,0 +1,31 @@
+flowchart TD
+    A[Workflow: music] --> B[prowlarr_search]
+    B --> C["filter_candidates<br/>(category prefixes)"]
+    C --> D["filter_match<br/>(token similarity)"]
+    D --> E["redacted_enrich<br/>(group/torrent ids)"]
+    E --> F["filter_by_version<br/>(explicit version)"]
+    F --> G["rank_releases<br/>(format + source + rules)"]
+    G --> H[decide]
+    H --> I{decision}
+    I -->|selected| J[prowlarr_grab]
+    I -->|needs_choice| K[output options]
+    K --> L[CLI: iwantit choose]
+    L --> J
+    J --> M[store_tags]
+
+    subgraph prowlarr_search details
+        B1["Build query + categories<br/>from media_type"]
+        B2["Restrict indexers<br/>(optional allowlist)"]
+        B3[POST /api/v1/search]
+        B1 --> B2 --> B3
+    end
+
+    subgraph decide details
+        H1[Auto-select if explicit version]
+        H2["Auto-select FLAC/V0/320<br/>when only format differs"]
+        H3[Else require choice]
+        H1 --> H2 --> H3
+    end
+
+    B --> B1
+    H --> H1

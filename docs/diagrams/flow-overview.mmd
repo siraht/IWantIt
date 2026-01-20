@@ -1,0 +1,53 @@
+flowchart TD
+    A[Caller: text / url / image / json] --> B[CLI: iwantit run]
+    B --> C[Load config + secrets]
+    C --> D[Build request payload]
+    D --> E[Pre-steps pipeline]
+    E --> F{Workflow selection}
+
+    F -->|explicit --workflow| G[Run selected workflow]
+    F -->|media_type inferred| G
+    F -->|default_workflow| G
+
+    G --> H[Workflow steps]
+    H --> I[Decision + dispatch]
+    I --> J[Output JSON response]
+
+    subgraph Pre-steps pipeline
+        E1["ocr<br/>(if image)"] --> E2["fetch_url<br/>(if url)"]
+        E2 --> E3[identify]
+        E3 --> E4[identify_web_search]
+        E4 --> E5[extract_release_preferences]
+        E5 --> E6[determine_media_type]
+        E6 --> E7["resolve_track_release<br/>(music only)"]
+    end
+
+    E --> E1
+
+    subgraph Workflows
+        W1[music] --> W2[prowlarr_search]
+        W2 --> W3[filter_candidates]
+        W3 --> W4[filter_match]
+        W4 --> W5[redacted_enrich]
+        W5 --> W6[filter_by_version]
+        W6 --> W7[rank_releases]
+        W7 --> W8[decide]
+        W8 --> W9[prowlarr_grab]
+        W9 --> W10[store_tags]
+
+        W11[book] --> W12[prowlarr_search]
+        W12 --> W13[filter_candidates]
+        W13 --> W14[filter_match]
+        W14 --> W15[book_decide]
+        W15 --> W16[rank_releases]
+        W16 --> W17[decide]
+        W17 --> W18[prowlarr_grab]
+
+        W19[movie] --> W20[dispatch_radarr]
+        W21[tv] --> W22[dispatch_sonarr]
+    end
+
+    G -->|music| W1
+    G -->|book| W11
+    G -->|movie| W19
+    G -->|tv| W21

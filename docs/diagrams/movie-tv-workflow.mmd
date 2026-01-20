@@ -1,0 +1,12 @@
+flowchart TD
+    A[Workflow: movie] --> B[dispatch_radarr]
+    C[Workflow: tv] --> D[dispatch_sonarr]
+
+    B --> E{dry_run?}
+    D --> F{dry_run?}
+
+    E -->|yes| G[Record request only]
+    E -->|no| H[POST to Radarr API]
+
+    F -->|yes| I[Record request only]
+    F -->|no| J[POST to Sonarr API]

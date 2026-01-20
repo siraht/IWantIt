@@ -1,0 +1,21 @@
+flowchart TD
+    A[ranked candidates] --> B[decide]
+    B --> C{auto-select?}
+    C -->|explicit version| D[select first]
+    C -->|single candidate| D
+    C -->|format-only diff| D
+    C -->|multiple| E[needs_choice]
+    E --> F[output options]
+    F --> G[CLI: iwantit choose]
+    G --> D
+    D --> H{dispatch target}
+    H -->|Prowlarr grab| I[prowlarr_grab]
+    H -->|Radarr/Sonarr| J[dispatch_arr]
+
+    I --> K{dry_run?}
+    K -->|yes| L[emit request only]
+    K -->|no| M[POST to Prowlarr]
+
+    J --> N{dry_run?}
+    N -->|yes| O[emit request only]
+    N -->|no| P[POST to Arr]

@@ -1,0 +1,16 @@
+flowchart TD
+    A[Workflow: book] --> B[prowlarr_search]
+    B --> C["filter_candidates<br/>(category prefixes)"]
+    C --> D[filter_match]
+    D --> E["book_decide<br/>(placeholder)"]
+    E --> F[rank_releases]
+    F --> G[decide]
+    G --> H{decision}
+    H -->|selected| I[prowlarr_grab]
+    H -->|needs_choice| J[output options]
+    J --> K[CLI: iwantit choose]
+    K --> I
+
+    subgraph notes
+        N1["Book format logic<br/>(ebook/audiobook)<br/>not implemented yet"]
+    end
