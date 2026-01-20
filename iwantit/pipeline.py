@@ -178,6 +178,7 @@ def run_workflow(
     start_step: str | None = None,
     end_step: str | None = None,
     dry_run: bool = False,
+    progress: Callable[[str, str, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     ensure_dir(state_dir())
     context = Context(config=config, state_path=str(state_dir()), choice_index=choice_index, dry_run=dry_run)
@@ -192,7 +193,11 @@ def run_workflow(
             continue
         step_cfg = config.get("steps", {}).get(step_name, {"builtin": step_name})
         try:
+            if progress:
+                progress(step_name, "start", data)
             data = run_step(step_name, step_cfg, data, context, builtins)
+            if progress:
+                progress(step_name, "end", data)
         except Exception as exc:
             data.setdefault("error", {})["message"] = str(exc)
             data["error"]["step"] = step_name
@@ -218,7 +223,11 @@ def run_workflow(
             continue
         step_cfg = config.get("steps", {}).get(step_name, {"builtin": step_name})
         try:
+            if progress:
+                progress(step_name, "start", data)
             data = run_step(step_name, step_cfg, data, context, builtins)
+            if progress:
+                progress(step_name, "end", data)
         except Exception as exc:
             data.setdefault("error", {})["message"] = str(exc)
             data["error"]["step"] = step_name

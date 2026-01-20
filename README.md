@@ -68,11 +68,26 @@ Sources: `docs/diagrams/decision-and-dispatch.mmd` and `docs/diagrams/rendered/d
 ## Install (uv)
 Install uv first (see https://astral.sh/uv).
 
+### Quick test (no install)
+From the repo root:
+```bash
+uv run python -m iwantit --help
+```
+
 ### User install (recommended)
 ```bash
 uv tool install .
 ```
-This keeps dependencies isolated and exposes `iwantit` on your PATH (uv will print the bin dir).
+`.` means "install from this local project". This keeps dependencies isolated and exposes `iwantit`
+on your PATH. If your shell doesn't see it yet, run:
+```bash
+uv tool update-shell
+```
+
+### Install from git (shareable)
+```bash
+uv tool install git+https://github.com/<you>/iwantit.git
+```
 
 ### Development
 ```bash
@@ -81,7 +96,28 @@ source .venv/bin/activate
 uv pip install -e .
 ```
 
+### Build & publish (when ready)
+```bash
+uv build
+uv publish
+```
+
 ## Quick start
+If installing locally:
+```bash
+uv tool install .
+```
+If `iwantit` isn't found, run:
+```bash
+uv tool update-shell
+```
+
+After publishing to PyPI:
+```bash
+uv tool install iwantit
+```
+
+Then:
 ```bash
 iwantit init
 
@@ -108,6 +144,7 @@ iwantit validate
 Notes:
 - `iwantit run` returns exit code **20** when `decision.status = needs_choice`.
 - `iwantit choose` can emit `--choice N` flags for reruns.
+- Progress messages are written to stderr; use `--quiet` to suppress.
 
 ## Output shape
 Every run returns a JSON object:

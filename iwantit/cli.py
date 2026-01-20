@@ -113,6 +113,62 @@ def cmd_run(args: argparse.Namespace) -> int:
     config = load_config(cfg_path)
     data = _build_request(args)
     data["_meta"] = {"config_path": str(cfg_path)}
+    progress = None
+    if not getattr(args, "quiet", False):
+        progress_messages = {
+            "ocr": "OCRing image",
+            "fetch_url": "Fetching URL metadata",
+            "identify": "Normalizing input",
+            "identify_web_search": "Verifying release via web search",
+            "extract_release_preferences": "Extracting release preferences",
+            "determine_media_type": "Determining media type",
+            "resolve_track_release": "Resolving track to release",
+            "prowlarr_search": "Searching Prowlarr",
+            "filter_candidates": "Filtering candidates by category",
+            "filter_match": "Filtering candidates by query match",
+            "redacted_enrich": "Enriching tracker metadata",
+            "filter_by_version": "Filtering by requested version",
+            "book_decide": "Filtering by book format",
+            "rank_releases": "Ranking candidates",
+            "decide": "Selecting best release",
+            "prowlarr_grab": "Sending release to Prowlarr",
+            "store_tags": "Storing tags",
+            "dispatch_radarr": "Sending release to Radarr",
+            "dispatch_sonarr": "Sending release to Sonarr",
+        }
+
+        def _progress(step: str, phase: str, payload: dict[str, Any]) -> None:
+            if phase == "start":
+                message = progress_messages.get(step)
+                if message:
+                    sys.stderr.write(f"{message}\n")
+                return
+            if phase != "end":
+                return
+            if step == "determine_media_type":
+                work = payload.get("work", {}) or {}
+                request = payload.get("request", {}) or {}
+                media = work.get("media_type") or request.get("media_type")
+                if media:
+                    sys.stderr.write(f"Media type: {media}\n")
+            if step in {"prowlarr_grab", "dispatch_radarr", "dispatch_sonarr"}:
+                dispatch_key = {
+                    "prowlarr_grab": "prowlarr",
+                    "dispatch_radarr": "radarr",
+                    "dispatch_sonarr": "sonarr",
+                }[step]
+                target = {
+                    "prowlarr_grab": "Prowlarr",
+                    "dispatch_radarr": "Radarr",
+                    "dispatch_sonarr": "Sonarr",
+                }[step]
+                entry = (payload.get("dispatch") or {}).get(dispatch_key) or {}
+                status = entry.get("status")
+                if status in {"ok", "dry_run"}:
+                    suffix = " (dry run)" if status == "dry_run" else ""
+                    sys.stderr.write(f"Release sent to {target}{suffix}\n")
+
+        progress = _progress
     result = run_workflow(
         config,
         data,
@@ -122,6 +178,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         start_step=args.from_step,
         end_step=args.until_step,
         dry_run=args.dry_run,
+        progress=progress,
     )
     if isinstance(result, dict):
         result.pop("_meta", None)
@@ -299,6 +356,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--config", help="Path to config file")
+    common.add_argument("--quiet", action="store_true", help="Suppress progress output")
 
     input_group = argparse.ArgumentParser(add_help=False)
     source = input_group.add_mutually_exclusive_group()
