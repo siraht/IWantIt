@@ -14,7 +14,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 import requests
 
 from ..pipeline import Context, render_template
-from ..util import cache_key, read_cache, request_with_retry, write_cache
+from ..util import cache_key, looks_like_url, read_cache, request_with_retry, write_cache
 
 
 def identify(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> dict[str, Any]:
@@ -270,6 +270,8 @@ class _PageMetaParser(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         if self._in_title:
+            if self.title:
+                return
             text = data.strip()
             if text:
                 self.title = text
@@ -1084,15 +1086,25 @@ def _strip_suffix(title: str) -> str:
         "last.fm",
         "soundcloud",
         "amazon",
+        "beatport",
     )
     cleaned = title.strip()
-    for sep in (" - ", " | "):
+    for sep in (" | ", " - "):
         if sep in cleaned:
             parts = cleaned.split(sep)
             tail = parts[-1].strip().lower()
             if "." in tail or any(token in tail for token in suffixes):
                 cleaned = sep.join(parts[:-1]).strip()
     return cleaned
+
+
+def _strip_format_hint(title: str) -> str:
+    if not title:
+        return title
+    cleaned = title.strip()
+    pattern = r"(?:\s*[-–]\s*|\s+|\s*[\[(]\s*)?(ep|lp|album|single|mixtape|compilation|maxi[- ]?single)\s*[\])]*\s*$"
+    stripped = re.sub(pattern, "", cleaned, flags=re.IGNORECASE).strip()
+    return stripped or cleaned
 
 
 def _extract_year(text: str) -> int | None:
@@ -1105,6 +1117,84 @@ def _extract_year(text: str) -> int | None:
         return None
 
 
+_MONTHS = {
+    "jan": 1,
+    "january": 1,
+    "feb": 2,
+    "february": 2,
+    "mar": 3,
+    "march": 3,
+    "apr": 4,
+    "april": 4,
+    "may": 5,
+    "jun": 6,
+    "june": 6,
+    "jul": 7,
+    "july": 7,
+    "aug": 8,
+    "august": 8,
+    "sep": 9,
+    "sept": 9,
+    "september": 9,
+    "oct": 10,
+    "october": 10,
+    "nov": 11,
+    "november": 11,
+    "dec": 12,
+    "december": 12,
+}
+
+
+def _extract_release_year_from_text(text: str) -> int | None:
+    if not text:
+        return None
+    iso_match = re.search(r"\b(19|20)\d{2}-\d{2}-\d{2}\b", text)
+    if iso_match:
+        try:
+            return int(iso_match.group(0)[:4])
+        except ValueError:
+            return None
+    month_names = "|".join(sorted(_MONTHS.keys(), key=len, reverse=True))
+    patterns = [
+        rf"\b({month_names})\s+\d{{1,2}},?\s+((?:19|20)\d{{2}})\b",
+        rf"\b\d{{1,2}}\s+({month_names})\s+((?:19|20)\d{{2}})\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            try:
+                return int(match.group(2))
+            except ValueError:
+                return None
+    return _extract_year(text)
+
+
+def _extract_release_date_from_html(html: str) -> str | None:
+    if not html:
+        return None
+    meta_patterns = [
+        r"(?:property|name)=[\"']music:release_date[\"'][^>]+content=[\"']([^\"']+)",
+        r"(?:property|name)=[\"']og:release_date[\"'][^>]+content=[\"']([^\"']+)",
+    ]
+    for pattern in meta_patterns:
+        match = re.search(pattern, html, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    patterns = [
+        r"Release Date[^\d]{0,40}((?:19|20)\d{2}-\d{2}-\d{2})",
+        r"Release Date[^\d]{0,40}((?:19|20)\d{2}/\d{2}/\d{2})",
+        r"releaseDate[^\d]{0,20}((?:19|20)\d{2}-\d{2}-\d{2})",
+        r"release_date[^\d]{0,20}((?:19|20)\d{2}-\d{2}-\d{2})",
+        r"datePublished[^\d]{0,20}((?:19|20)\d{2}-\d{2}-\d{2})",
+        r"datePublished[^\d]{0,20}((?:19|20)\d{2}/\d{2}/\d{2})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, html, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return None
+
+
 def _infer_media_type_from_query(query: str) -> str | None:
     if not query:
         return None
@@ -1113,12 +1203,14 @@ def _infer_media_type_from_query(query: str) -> str | None:
         return "tv"
     if "season" in text or "episode" in text:
         return "tv"
-    if " by " in text:
-        return "book"
     if " - " in query:
         parts = [part.strip() for part in query.split(" - ", 1)]
         if len(parts) == 2 and all(parts):
+            if " by " in parts[1].lower():
+                return "music"
             return "music"
+    if " by " in text:
+        return "book"
     if any(token in text for token in ("movie", "film", "trailer")):
         return "movie"
     if any(token in text for token in ("book", "novel", "audiobook")):
@@ -1194,11 +1286,17 @@ def _extract_fields_from_title(media_type: str | None, title: str) -> dict[str, 
     if media_type == "music":
         if " - " in title:
             artist, release = title.split(" - ", 1)
+            if " by " in release.lower():
+                by_split = re.split(r"\s+by\s+", release, maxsplit=1, flags=re.IGNORECASE)
+                if len(by_split) == 2 and by_split[1].strip():
+                    out["artist"] = by_split[1].strip()
+                    out["title"] = _strip_format_hint(artist.strip())
+                    return out
             if artist.strip() and release.strip():
                 out["artist"] = artist.strip()
-                out["title"] = release.strip()
+                out["title"] = _strip_format_hint(release.strip())
                 return out
-        out["title"] = title.strip()
+        out["title"] = _strip_format_hint(title.strip())
         return out
     if media_type == "book":
         lower = title.lower()
@@ -1230,12 +1328,31 @@ def identify_web_search(
 
     seed_text = request.get("query") or request.get("input") or ""
     seed_clean = _strip_suffix(seed_text)
-    seed_fields = _extract_fields_from_title(media_type, seed_clean)
+    parse_media_type = media_type or _infer_media_type_from_query(seed_text)
+    seed_fields = _extract_fields_from_title(parse_media_type, seed_clean)
+    if (
+        request.get("input_type") == "url"
+        and seed_fields.get("artist")
+        and seed_fields.get("title")
+        and work.get("title") == seed_text
+    ):
+        work["artist"] = seed_fields["artist"]
+        work["title"] = seed_fields["title"]
     for key, value in seed_fields.items():
         if value and not work.get(key):
             work[key] = value
+    if not work.get("year"):
+        url_meta = data.get("url") or {}
+        if isinstance(url_meta, dict) and url_meta.get("release_year"):
+            work["year"] = url_meta.get("release_year")
+        if not work.get("year"):
+            url_desc = url_meta.get("description") if isinstance(url_meta, dict) else None
+            if isinstance(url_desc, str):
+                year = _extract_release_year_from_text(url_desc)
+                if year:
+                    work["year"] = year
 
-    query = _select_query(data, step_cfg, media_type)
+    query = _select_query(data, step_cfg, parse_media_type)
     if not query:
         return data
 
@@ -1325,10 +1442,24 @@ def identify_web_search(
         "count": len(mapped),
     }
 
+    if not work.get("year") and mapped:
+        for item in mapped[:5]:
+            if not isinstance(item, dict):
+                continue
+            blob = " ".join(
+                [str(item.get("title") or ""), str(item.get("snippet") or item.get("description") or "")]
+            ).strip()
+            year = _extract_release_year_from_text(blob)
+            if year:
+                work["year"] = year
+                break
+
     if not mapped:
         return data
 
     original = request.get("query_original") or request.get("query") or ""
+    if looks_like_url(original):
+        original = request.get("query") or original
     limit = int(step_cfg.get("result_limit") or response_cfg.get("limit") or 5)
     min_match_ratio = float(step_cfg.get("min_match_ratio") or 0.4)
     min_token_matches = int(step_cfg.get("min_token_matches") or 2)
@@ -1336,7 +1467,7 @@ def identify_web_search(
     single_match_ratio = float(step_cfg.get("single_match_ratio") or 0.75)
     consensus_fields, consensus_meta = _consensus_fields_from_results(
         mapped,
-        media_type,
+        parse_media_type,
         original,
         limit,
         min_match_ratio,
@@ -1349,9 +1480,31 @@ def identify_web_search(
         consensus_override = step_cfg.get("consensus_override")
         if consensus_override is None:
             consensus_override = True
+        protect_title = (
+            request.get("input_type") == "url"
+            and looks_like_url(request.get("query_original") or "")
+        )
+        existing_title = work.get("title") if isinstance(work.get("title"), str) else ""
+        existing_artist = work.get("artist") if isinstance(work.get("artist"), str) else ""
         for key, value in consensus_fields.items():
             if value is None:
                 continue
+            if key == "artist" and protect_title and existing_artist and isinstance(value, str):
+                existing_tokens = set(_tokenize(existing_artist))
+                new_tokens = set(_tokenize(value))
+                if new_tokens and existing_tokens:
+                    if len(new_tokens) < len(existing_tokens) and any(
+                        sep in existing_artist for sep in (",", "&", "+")
+                    ):
+                        continue
+            if key == "title" and protect_title and existing_title and isinstance(value, str):
+                existing_tokens = set(_tokenize(existing_title))
+                new_tokens = set(_tokenize(value))
+                if new_tokens and existing_tokens:
+                    if len(new_tokens) < len(existing_tokens) and any(
+                        token in existing_title for token in (" / ", "[", "|")
+                    ):
+                        continue
             if override or consensus_override or not work.get(key):
                 work[key] = value
 
@@ -1363,7 +1516,7 @@ def identify_web_search(
             title = work.get("title")
             year = work.get("year")
             suffix = f" ({year})" if year else ""
-            if media_type == "music" and artist and title:
+            if parse_media_type == "music" and artist and title:
                 request["query"] = f"{artist} - {title}{suffix}"
             elif title:
                 request["query"] = f"{title}{suffix}"
@@ -1650,17 +1803,18 @@ def fetch_url(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) 
     if not url.startswith(("http://", "https://")):
         return data
 
+    headers = step_cfg.get(
+        "headers",
+        {
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        },
+    )
     try:
         response = request_with_retry(
             "GET",
             url,
-            headers=step_cfg.get(
-                "headers",
-                {
-                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-                    "Accept-Language": "en-US,en;q=0.9",
-                },
-            ),
+            headers=headers,
             timeout=step_cfg.get("timeout", 15),
             retries=int(step_cfg.get("retries") or 0),
             backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
@@ -1677,7 +1831,38 @@ def fetch_url(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) 
         data.setdefault("url", {})["content_type"] = content_type
         return data
 
-    meta = _extract_page_meta(response.text)
+    html = response.text
+    meta = _extract_page_meta(html)
+    title = (meta.get("title") or "").strip()
+    needs_retry = not title or title == url
+    if not needs_retry and "spotify" in title.lower() and "web player" in title.lower():
+        needs_retry = True
+    if needs_retry:
+        alt_headers = step_cfg.get(
+            "headers_alt",
+            {
+                "User-Agent": "Mozilla/5.0",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+        )
+        try:
+            alt_response = request_with_retry(
+                "GET",
+                url,
+                headers=alt_headers,
+                timeout=step_cfg.get("timeout", 15),
+                retries=int(step_cfg.get("retries") or 0),
+                backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
+                max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
+                retry_statuses=step_cfg.get("retry_statuses"),
+            )
+            alt_response.raise_for_status()
+        except requests.RequestException:
+            pass
+        else:
+            html = alt_response.text
+            meta = _extract_page_meta(html)
+            content_type = (alt_response.headers.get("content-type") or "").lower()
     if (not meta.get("title") or meta.get("title") in ("- YouTube", "YouTube")) and "youtube.com" in url:
         try:
             oembed_url = "https://www.youtube.com/oembed"
@@ -1698,11 +1883,15 @@ def fetch_url(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) 
                 meta["title"] = str(payload["title"]).strip()
         except (requests.RequestException, json.JSONDecodeError):
             pass
+    release_date = _extract_release_date_from_html(html)
+    release_year = _extract_release_year_from_text(release_date or "")
     data["url"] = {
         "url": url,
         "title": meta.get("title"),
         "description": meta.get("description"),
         "content_type": content_type,
+        "release_date": release_date,
+        "release_year": release_year,
     }
 
     if not request.get("query_original"):
