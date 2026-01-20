@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iwantit"
+version = "0.1.0"
+description = "Extensible media request workflow runner"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "PyYAML>=6.0",
+  "requests>=2.31",
+]
+
+[project.scripts]
+iwantit = "iwantit.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["iwantit*"]
