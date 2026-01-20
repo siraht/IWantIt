@@ -11,6 +11,7 @@ import time
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 
@@ -57,6 +58,49 @@ def parse_kv_pairs(pairs: list[str] | None) -> dict[str, str]:
         if key:
             result[key] = value
     return result
+
+
+def looks_like_url(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    if not text:
+        return False
+    lower = text.lower()
+    if lower.startswith(("http://", "https://")):
+        return True
+    if lower.startswith("www.") and " " not in lower and "." in lower[4:]:
+        return True
+    try:
+        parsed = urlparse(text)
+    except ValueError:
+        return False
+    if parsed.scheme.lower() in {"http", "https"} and parsed.netloc:
+        return True
+    return False
+
+
+def normalize_request_input(request: dict[str, Any]) -> None:
+    if not isinstance(request, dict):
+        return
+    input_type = request.get("input_type")
+    if input_type == "image":
+        return
+    candidate = None
+    if isinstance(request.get("input"), str):
+        candidate = request.get("input")
+    elif isinstance(request.get("query"), str):
+        candidate = request.get("query")
+    elif isinstance(request.get("url"), str):
+        candidate = request.get("url")
+    if not candidate or not looks_like_url(candidate):
+        return
+    if input_type in (None, "", "text", "json"):
+        request["input_type"] = "url"
+    if "input" not in request:
+        request["input"] = candidate
+    if "url" not in request:
+        request["url"] = candidate
 
 
 def deep_merge(base: Any, overlay: Any) -> Any:

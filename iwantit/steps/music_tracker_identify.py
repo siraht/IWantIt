@@ -11,6 +11,7 @@ import requests
 
 from ..config import ensure_config_exists, load_config
 from ..pipeline import render_template
+from ..util import normalize_request_input
 
 
 def _read_input() -> dict[str, Any]:
@@ -20,10 +21,17 @@ def _read_input() -> dict[str, Any]:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return {"request": {"input": raw, "input_type": "text", "query": raw}}
+        payload = {"request": {"input": raw, "input_type": "text", "query": raw}}
+        normalize_request_input(payload["request"])
+        return payload
     if isinstance(data, dict):
+        request = data.get("request")
+        if isinstance(request, dict):
+            normalize_request_input(request)
         return data
-    return {"request": {"input": data, "input_type": "json"}}
+    payload = {"request": {"input": data, "input_type": "json"}}
+    normalize_request_input(payload["request"])
+    return payload
 
 
 def _get_path(obj: Any, path: str) -> Any:

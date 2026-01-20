@@ -22,6 +22,7 @@ from .util import (
     coerce_tags,
     is_stdin_tty,
     is_stdout_tty,
+    normalize_request_input,
     parse_kv_pairs,
     read_json,
     read_stdin,
@@ -47,6 +48,13 @@ def _coerce_request_payload(data: Any) -> dict[str, Any]:
     return {"request": payload}
 
 
+def _normalize_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    request = payload.get("request")
+    if isinstance(request, dict):
+        normalize_request_input(request)
+    return payload
+
+
 def _finalize_output(data: Any) -> dict[str, Any]:
     if not isinstance(data, dict):
         return {"result": data, "decision": {"status": "complete"}}
@@ -64,7 +72,7 @@ def _finalize_output(data: Any) -> dict[str, Any]:
 def _build_request(args: argparse.Namespace) -> dict[str, Any]:
     if args.json:
         data = _load_json_file(args.json)
-        return _coerce_request_payload(data)
+        return _normalize_request_payload(_coerce_request_payload(data))
 
     if args.stdin or (not is_stdin_tty() and not (args.text or args.url or args.image)):
         raw = read_stdin().strip()
@@ -72,9 +80,10 @@ def _build_request(args: argparse.Namespace) -> dict[str, Any]:
             return {"request": {}}
         try:
             data = read_json(raw)
-            return _coerce_request_payload(data)
+            return _normalize_request_payload(_coerce_request_payload(data))
         except json.JSONDecodeError:
-            return {"request": {"input": raw, "input_type": "text", "query": raw}}
+            payload = {"request": {"input": raw, "input_type": "text", "query": raw}}
+            return _normalize_request_payload(payload)
 
     input_value = args.text or args.url or args.image
     input_type = "text"
@@ -98,7 +107,7 @@ def _build_request(args: argparse.Namespace) -> dict[str, Any]:
         prefs["book_format"] = args.book_format
     request["preferences"] = prefs
 
-    return {"request": request}
+    return _normalize_request_payload({"request": request})
 
 
 def cmd_init(args: argparse.Namespace) -> int:
