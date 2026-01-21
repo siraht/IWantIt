@@ -333,8 +333,9 @@ def _slim_item(item: Any) -> Any:
             rank_out: dict[str, Any] = {}
             if "score" in value:
                 rank_out["score"] = value.get("score")
-            if "reason" in value:
-                rank_out["reason"] = value.get("reason")
+            reasons = value.get("reasons")
+            if isinstance(reasons, list) and reasons:
+                rank_out["reasons"] = reasons[:3]
             if rank_out:
                 out[key] = rank_out
             continue
