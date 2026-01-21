@@ -1,0 +1,11 @@
+{
+  "web": {
+    "results": [
+      {
+        "title": "Sample Artist - Sample Album (2018)",
+        "url": "https://example.com/album",
+        "description": "Release Date 2018-02-10"
+      }
+    ]
+  }
+}

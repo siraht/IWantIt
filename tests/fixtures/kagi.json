@@ -1,0 +1,14 @@
+{
+  "data": [
+    {
+      "title": "Artist - Album (2020)",
+      "url": "https://example.com/release",
+      "snippet": "Release Date 2020-01-01"
+    },
+    {
+      "title": "Another Artist - Single (2019)",
+      "url": "https://example.com/single",
+      "snippet": "Release Date 2019-05-02"
+    }
+  ]
+}
