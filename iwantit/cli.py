@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+import requests
+
 from .config import (
     ensure_config_exists,
     load_config,
@@ -17,11 +19,14 @@ from .config import (
     save_default_secrets,
     validate_config,
 )
+from .registry import provider_required_keys
+from .step_metadata import STEP_METADATA
 from .pipeline import Context, run_workflow
 from .paths import ensure_dir, state_dir
 from .steps.builtin import BUILTINS
 from .util import (
     cache_key,
+    classify_exception,
     coerce_tags,
     is_stdin_tty,
     is_stdout_tty,
@@ -117,7 +122,12 @@ def _finalize_output(data: Any) -> dict[str, Any]:
     data.setdefault("search", {})
     data.setdefault("dispatch", {})
     data.setdefault("tags", {})
+    data.setdefault("canonical", {})
     data.setdefault("warnings", [])
+    if "run_id" not in data and isinstance(data.get("_meta"), dict):
+        run_id = data["_meta"].get("run_id")
+        if run_id:
+            data["run_id"] = run_id
     if data.get("error") and data["decision"].get("status") != "error":
         data["decision"]["status"] = "error"
     return data
@@ -393,6 +403,41 @@ def _build_request(args: argparse.Namespace) -> dict[str, Any]:
     return _normalize_request_payload({"request": request})
 
 
+def _build_request_from_item(item: Any) -> dict[str, Any]:
+    if isinstance(item, dict):
+        return _normalize_request_payload(_coerce_request_payload(item))
+    payload = {"request": {"input": item, "input_type": "text", "query": str(item)}}
+    return _normalize_request_payload(payload)
+
+
+def _load_batch_inputs(path: str) -> list[Any]:
+    if path == "-":
+        raw = read_stdin()
+    else:
+        raw = Path(path).expanduser().read_text(encoding="utf-8")
+    raw = raw.strip()
+    if not raw:
+        return []
+    try:
+        data = read_json(raw)
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            return [data]
+    except json.JSONDecodeError:
+        pass
+    items = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            items.append(read_json(line))
+        except json.JSONDecodeError:
+            items.append(line)
+    return items
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     cfg_path = save_default_config(path=Path(args.config).expanduser() if args.config else None, overwrite=args.force)
     save_default_secrets(overwrite=False)
@@ -403,6 +448,68 @@ def cmd_init(args: argparse.Namespace) -> int:
 def cmd_run(args: argparse.Namespace) -> int:
     cfg_path = ensure_config_exists(args.config)
     config = load_config(cfg_path)
+    if getattr(args, "batch", None):
+        items = _load_batch_inputs(args.batch)
+        if not items:
+            write_json({"summary": {"total": 0, "selected": 0, "needs_choice": 0, "error": 0}, "results": []})
+            return 0
+        results = [None] * len(items)
+        summary = {"total": len(items), "selected": 0, "needs_choice": 0, "error": 0}
+
+        def run_item(idx: int, item: Any) -> None:
+            data = _build_request_from_item(item)
+            data["_meta"] = {"config_path": str(cfg_path)}
+            result = run_workflow(
+                config,
+                data,
+                BUILTINS,
+                workflow_name=args.workflow,
+                choice_index=args.choice,
+                start_step=args.from_step,
+                end_step=args.until_step,
+                dry_run=args.dry_run,
+                confirm=getattr(args, "confirm", False),
+            )
+            if isinstance(result, dict):
+                result.pop("_meta", None)
+                result.pop("_config_path", None)
+            results[idx] = _finalize_output(result)
+
+        if args.jobs is None:
+            jobs = int((config.get("concurrency", {}) or {}).get("default") or 1)
+        else:
+            jobs = int(args.jobs or 1)
+        if jobs > 1:
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(max_workers=jobs) as executor:
+                futures = [executor.submit(run_item, idx, item) for idx, item in enumerate(items)]
+                for fut in futures:
+                    fut.result()
+        else:
+            for idx, item in enumerate(items):
+                run_item(idx, item)
+
+        for result in results:
+            if not isinstance(result, dict):
+                continue
+            status = (result.get("decision") or {}).get("status")
+            if status == "selected":
+                summary["selected"] += 1
+            elif status == "needs_choice":
+                summary["needs_choice"] += 1
+            elif status == "error" or result.get("error"):
+                summary["error"] += 1
+        output = {"summary": summary, "results": results}
+        if not args.full:
+            output = _compact_output(output)
+        write_json(output)
+        if summary["error"] > 0:
+            return 1
+        if summary["needs_choice"] > 0:
+            return EXIT_NEEDS_CHOICE
+        return 0
+
     data = _build_request(args)
     data["_meta"] = {"config_path": str(cfg_path)}
     progress = None
@@ -517,7 +624,16 @@ def cmd_step(args: argparse.Namespace) -> int:
     try:
         result = step(data, step_cfg, context)
     except Exception as exc:
-        result = {"error": {"message": str(exc), "step": args.name, "type": exc.__class__.__name__}}
+        code, hint = classify_exception(exc)
+        result = {
+            "error": {
+                "message": str(exc),
+                "step": args.name,
+                "type": exc.__class__.__name__,
+                "code": code,
+                "hint": hint,
+            }
+        }
     output = _finalize_output(result)
     if not args.full:
         output = _compact_output(output)
@@ -593,6 +709,46 @@ def cmd_choose(args: argparse.Namespace) -> int:
     if not options:
         sys.stderr.write("no options available\n")
         return 1
+
+    def _score(option: Any) -> float | None:
+        if isinstance(option, dict):
+            rank = option.get("rank") or {}
+            try:
+                return float(rank.get("score"))
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    def _year(option: Any) -> int | None:
+        if isinstance(option, dict):
+            value = option.get("year") or option.get("release_year")
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    def _matches_format(option: Any, fmt: str) -> bool:
+        if not isinstance(option, dict):
+            return False
+        text = " ".join(
+            [
+                str(option.get("title") or ""),
+                str(option.get("name") or ""),
+                str(option.get("format") or ""),
+                str(option.get("codec") or ""),
+                str(option.get("bitrate") or ""),
+            ]
+        ).lower()
+        return fmt.lower() in text
+
+    if args.min_score is not None:
+        options = [opt for opt in options if (_score(opt) is not None and _score(opt) >= args.min_score)]
+    if args.year is not None:
+        options = [opt for opt in options if _year(opt) == args.year]
+    if args.format_hint:
+        options = [opt for opt in options if _matches_format(opt, args.format_hint)]
+
     if args.select is None:
         for idx, opt in enumerate(options):
             label = _option_label(opt)
@@ -600,6 +756,17 @@ def cmd_choose(args: argparse.Namespace) -> int:
                 score = opt.get("rank", {}).get("score")
                 if score is not None:
                     label = f"{label} (score={score:.2f})"
+                if args.preview:
+                    extras = []
+                    for key in ("artist", "year", "format", "bitrate", "seeders", "indexer"):
+                        if opt.get(key):
+                            extras.append(f"{key}={opt.get(key)}")
+                    if extras:
+                        label = f\"{label} | {', '.join(extras)}\"
+                if args.explain:
+                    reasons = opt.get("rank", {}).get("reasons") or []
+                    if reasons:
+                        label = f\"{label} | reasons: {', '.join(reasons[:3])}\"
             if args.verbose and isinstance(opt, dict):
                 label = json.dumps(opt, ensure_ascii=True)
             sys.stdout.write(f"{idx}: {label}\n")
@@ -651,6 +818,12 @@ def cmd_list(args: argparse.Namespace) -> int:
                 sys.stdout.write(f"{name}: command={step.get('command')}\n")
             else:
                 sys.stdout.write(f"{name}: builtin={name}\n")
+        plugins = config.get("_plugins") or []
+        if plugins:
+            sys.stdout.write("plugins:\n")
+            for plugin in plugins:
+                if isinstance(plugin, dict):
+                    sys.stdout.write(f"- {plugin.get('name')} {plugin.get('version')} ({plugin.get('path')})\n")
         return 0
     sys.stderr.write("unknown list kind\n")
     return 1
@@ -666,8 +839,71 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 1 if errors else 0
 
 
+def _check_service(name: str, url: str, headers: dict[str, str] | None, timeout: float = 5.0) -> tuple[bool, str]:
+    try:
+        response = requests.get(url, headers=headers, timeout=timeout)
+        if response.status_code in {401, 403}:
+            return False, f"{name} auth failed ({response.status_code})"
+        response.raise_for_status()
+        return True, f"{name} ok"
+    except requests.RequestException as exc:
+        return False, f"{name} error: {exc}"
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    config = load_config(ensure_config_exists(args.config))
+    errors, warnings = validate_config(config, list(BUILTINS.keys()))
+    failed = False
+    for warning in warnings:
+        sys.stderr.write(f"warning: {warning}\n")
+    for error in errors:
+        sys.stderr.write(f"error: {error}\n")
+        failed = True
+
+    prowlarr = config.get("prowlarr", {}) or {}
+    if prowlarr.get("url") and prowlarr.get("api_key") and prowlarr.get("api_key") != "CHANGE_ME":
+        url = prowlarr["url"].rstrip("/") + "/api/v1/system/status"
+        ok, msg = _check_service("prowlarr", url, {"X-Api-Key": prowlarr["api_key"]})
+        sys.stderr.write(msg + "\n")
+        failed = failed or not ok
+
+    arr = config.get("arr", {}) or {}
+    for key, label in (("radarr", "radarr"), ("sonarr", "sonarr")):
+        cfg = arr.get(key) or {}
+        if cfg.get("url") and cfg.get("api_key") and cfg.get("api_key") != "CHANGE_ME":
+            url = cfg["url"].rstrip("/") + "/api/v3/system/status"
+            ok, msg = _check_service(label, url, {"X-Api-Key": cfg["api_key"]})
+            sys.stderr.write(msg + "\n")
+            failed = failed or not ok
+
+    redacted = config.get("redacted", {}) or {}
+    if redacted.get("url") and redacted.get("api_key") and redacted.get("api_key") != "CHANGE_ME":
+        url = redacted["url"].rstrip("/") + "/ajax.php?action=index"
+        ok, msg = _check_service("redacted", url, {"Authorization": redacted["api_key"]})
+        sys.stderr.write(msg + "\n")
+        failed = failed or not ok
+
+    web = config.get("web_search", {}) or {}
+    provider = web.get("provider")
+    providers = web.get("providers", {}) or {}
+    if provider and provider in providers:
+        api_key = providers.get(provider, {}).get("api_key")
+        if not api_key or api_key == "CHANGE_ME":
+            sys.stderr.write(f"warning: web_search.providers.{provider}.api_key is not set\n")
+            failed = True
+
+    return 1 if failed else 0
+
+
 def cmd_help(args: argparse.Namespace) -> int:
     topic = (args.topic or "overview").lower()
+    cfg_path = None
+    config = {}
+    try:
+        cfg_path = ensure_config_exists(None)
+        config = load_config(cfg_path)
+    except Exception:
+        config = {}
     config_template = (
         "Minimal config template:\n"
         "  web_search:\n"
@@ -707,16 +943,21 @@ def cmd_help(args: argparse.Namespace) -> int:
             "  iwantit run --text \"Artist - Album\"\n"
             "  iwantit run --url \"https://...\"\n"
             "  iwantit run --text \"...\" --confirm   # allow dispatch/grab\n"
+            "  iwantit run --batch inputs.jsonl --jobs 4\n"
             "\n"
             "When you see decision.status=needs_choice:\n"
             "  iwantit run ... | iwantit choose --stdin --interactive\n"
             "  iwantit run ... --choice N [--confirm]\n"
+            "\n"
+            "Doctor:\n"
+            "  iwantit doctor\n"
             "\n"
             "More:\n"
             "  iwantit help config     # required config and env vars\n"
             "  iwantit help json       # input/output JSON contract\n"
             "  iwantit help safety     # dry-run vs confirm\n"
             "  iwantit help exit-codes # automation semantics\n"
+            "  iwantit help errors     # error codes\n"
         ),
         "config": (
             "Config locations:\n"
@@ -737,7 +978,7 @@ def cmd_help(args: argparse.Namespace) -> int:
             "  { \"request\": { \"input\": \"...\", \"input_type\": \"text|url|image\", \"query\": \"...\" } }\n"
             "\n"
             "Output JSON (always):\n"
-            "  request, work, decision, search, dispatch, tags, error\n"
+            "  run_id, request, work, decision, search, dispatch, tags, canonical, logs, report, error\n"
             "\n"
             "Notes:\n"
             "  - URL-like input is auto-detected and treated as input_type=url.\n"
@@ -749,7 +990,6 @@ def cmd_help(args: argparse.Namespace) -> int:
             "  --confirm: allows dispatch/grab steps to run.\n"
             "\n"
             "Side-effect steps include:\n"
-            "  prowlarr_grab, dispatch_radarr, dispatch_sonarr, http_dispatch\n"
         ),
         "exit-codes": (
             "Exit codes:\n"
@@ -757,12 +997,39 @@ def cmd_help(args: argparse.Namespace) -> int:
             "  1  error\n"
             "  20 decision.status=needs_choice\n"
         ),
+        "errors": (
+            "Common error codes:\n"
+            "  AUTH_MISSING  Missing API key or credentials\n"
+            "  AUTH_FAILED   Invalid credentials or forbidden\n"
+            "  NETWORK_ERROR Provider unreachable or network issue\n"
+            "  TIMEOUT       Request or command timed out\n"
+            "  PARSE_ERROR   Invalid JSON or parse error\n"
+            "  CONFIG_ERROR  Invalid configuration\n"
+            "  NOT_FOUND     Missing file or resource\n"
+            "  STEP_FAILED   External step exited non-zero\n"
+            "  STEP_ERROR    Generic step error\n"
+            "\n"
+            "Each error includes a hint field for remediation.\n"
+        ),
     }
     if topic not in docs:
         sys.stderr.write(f"unknown help topic: {topic}\n")
-        sys.stderr.write("available: overview, config, json, safety, exit-codes\n")
+        sys.stderr.write("available: overview, config, json, safety, exit-codes, errors\n")
         return 1
     output = docs[topic]
+    if topic == "config" and config:
+        req = provider_required_keys(config)
+        if req:
+            lines = ["\nActive providers (required keys):"]
+            for name, keys in sorted(req.items()):
+                if not keys:
+                    continue
+                lines.append(f"  - {name}: {', '.join(keys)}")
+            output = output + "\n" + "\n".join(lines)
+    if topic == "safety":
+        side_effects = [name for name, meta in STEP_METADATA.items() if meta.get("side_effect")]
+        if side_effects:
+            output = output + "\n  " + ", ".join(sorted(side_effects)) + "\n"
     if topic == "config" and getattr(args, "verbose", False):
         output = output + "\n" + config_template
     sys.stdout.write(output)
@@ -777,6 +1044,8 @@ def build_parser() -> argparse.ArgumentParser:
         "  iwantit run --url \"https://open.spotify.com/album/...\"\n"
         "  iwantit run --text \"...\" --confirm   (allow dispatch/grab)\n"
         "  iwantit run ... | iwantit choose --stdin --interactive\n"
+        "  iwantit run --batch inputs.jsonl --jobs 4\n"
+        "  iwantit doctor\n"
         "\n"
         "Notes:\n"
         "  - URL-like input is auto-detected (stdin/JSON too).\n"
@@ -784,7 +1053,7 @@ def build_parser() -> argparse.ArgumentParser:
         "  - Exit code 20 means decision.status=needs_choice.\n"
         "\n"
         "More help:\n"
-        "  iwantit help [overview|config|json|safety|exit-codes]\n"
+        "  iwantit help [overview|config|json|safety|exit-codes|errors]\n"
     )
     parser = argparse.ArgumentParser(
         prog="iwantit",
@@ -846,6 +1115,8 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     run_cmd.add_argument("--workflow", help="Workflow name to run")
+    run_cmd.add_argument("--batch", help="Process a batch of inputs (JSON list, JSONL, or plain lines)")
+    run_cmd.add_argument("--jobs", type=int, help="Parallelism for --batch (default: config.concurrency.default)")
     run_cmd.set_defaults(func=cmd_run)
 
     step_cmd = sub.add_parser("step", parents=[common, input_group], help="Run a single built-in step")
@@ -860,6 +1131,11 @@ def build_parser() -> argparse.ArgumentParser:
     choose_cmd.add_argument("--select", help="Index or substring match")
     choose_cmd.add_argument("--interactive", action="store_true", help="Prompt for selection if TTY")
     choose_cmd.add_argument("--verbose", action="store_true", help="Show full JSON option")
+    choose_cmd.add_argument("--preview", action="store_true", help="Show extra fields for each option")
+    choose_cmd.add_argument("--explain", action="store_true", help="Show rank reasons if present")
+    choose_cmd.add_argument("--min-score", type=float, help="Filter options by minimum rank score")
+    choose_cmd.add_argument("--year", type=int, help="Filter options by year")
+    choose_cmd.add_argument("--format", dest="format_hint", help="Filter options by format substring")
     choose_cmd.add_argument(
         "--emit",
         choices=["index", "flag", "json"],
@@ -874,6 +1150,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate_cmd = sub.add_parser("validate", parents=[common], help="Validate config")
     validate_cmd.set_defaults(func=cmd_validate)
+
+    doctor_cmd = sub.add_parser("doctor", parents=[common], help="Check configuration and connectivity")
+    doctor_cmd.set_defaults(func=cmd_doctor)
 
     help_cmd = sub.add_parser("help", help="Show extended help topics")
     help_cmd.add_argument("topic", nargs="?", help="overview|config|json|safety|exit-codes")
