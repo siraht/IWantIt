@@ -68,6 +68,10 @@ def _append_log(data: dict[str, Any], config: dict[str, Any], entry: dict[str, A
         return
 
 
+def _safe_error_message(exc: Exception) -> str:
+    return str(redact_payload(str(exc)))
+
+
 def _dotify(value: Any) -> Any:
     if isinstance(value, dict):
         return DotDict({k: _dotify(v) for k, v in value.items()})
@@ -348,7 +352,8 @@ def run_workflow(
             if isinstance(exc, StepError):
                 code = getattr(exc, "code", code)
                 hint = getattr(exc, "hint", hint)
-            data.setdefault("error", {})["message"] = str(exc)
+            safe_message = _safe_error_message(exc)
+            data.setdefault("error", {})["message"] = safe_message
             data["error"]["step"] = step_name
             data["error"]["type"] = exc.__class__.__name__
             data["error"]["code"] = code
@@ -362,7 +367,7 @@ def run_workflow(
                     "phase": "end",
                     "status": "error",
                     "ts": time.time(),
-                    "error": {"code": code, "message": str(exc)},
+                    "error": {"code": code, "message": safe_message},
                 },
             )
             data.setdefault("decision", {})["status"] = "error"
@@ -374,7 +379,7 @@ def run_workflow(
         workflow = select_workflow(config, data, workflow_name)
     except Exception as exc:
         code, hint = classify_exception(exc)
-        data.setdefault("error", {})["message"] = str(exc)
+        data.setdefault("error", {})["message"] = _safe_error_message(exc)
         data["error"]["step"] = "select_workflow"
         data["error"]["type"] = exc.__class__.__name__
         data["error"]["code"] = code
@@ -399,7 +404,8 @@ def run_workflow(
             if isinstance(exc, StepError):
                 code = getattr(exc, "code", code)
                 hint = getattr(exc, "hint", hint)
-            data.setdefault("error", {})["message"] = str(exc)
+            safe_message = _safe_error_message(exc)
+            data.setdefault("error", {})["message"] = safe_message
             data["error"]["step"] = step_name
             data["error"]["type"] = exc.__class__.__name__
             data["error"]["code"] = code
@@ -413,7 +419,7 @@ def run_workflow(
                     "phase": "end",
                     "status": "error",
                     "ts": time.time(),
-                    "error": {"code": code, "message": str(exc)},
+                    "error": {"code": code, "message": safe_message},
                 },
             )
             data.setdefault("decision", {})["status"] = "error"

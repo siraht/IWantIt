@@ -32,6 +32,7 @@ from .util import (
     is_stdout_tty,
     normalize_request_input,
     parse_kv_pairs,
+    redact_payload,
     read_json,
     read_stdin,
     write_json,
@@ -245,6 +246,10 @@ def _log_failed_query(result: dict[str, Any], *, enabled: bool = True) -> None:
     path = ensure_dir(base / _FAILED_QUERIES_REL.parent) / _FAILED_QUERIES_REL.name
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, ensure_ascii=True) + "\n")
+
+
+def _safe_error_message(exc: Exception) -> str:
+    return str(redact_payload(str(exc)))
 
 
 def _print_result_summary(result: dict[str, Any], args: argparse.Namespace) -> None:
@@ -627,7 +632,7 @@ def cmd_step(args: argparse.Namespace) -> int:
         code, hint = classify_exception(exc)
         result = {
             "error": {
-                "message": str(exc),
+                "message": _safe_error_message(exc),
                 "step": args.name,
                 "type": exc.__class__.__name__,
                 "code": code,
@@ -762,11 +767,11 @@ def cmd_choose(args: argparse.Namespace) -> int:
                         if opt.get(key):
                             extras.append(f"{key}={opt.get(key)}")
                     if extras:
-                        label = f\"{label} | {', '.join(extras)}\"
+                        label = f"{label} | {', '.join(extras)}"
                 if args.explain:
                     reasons = opt.get("rank", {}).get("reasons") or []
                     if reasons:
-                        label = f\"{label} | reasons: {', '.join(reasons[:3])}\"
+                        label = f"{label} | reasons: {', '.join(reasons[:3])}"
             if args.verbose and isinstance(opt, dict):
                 label = json.dumps(opt, ensure_ascii=True)
             sys.stdout.write(f"{idx}: {label}\n")
@@ -847,7 +852,7 @@ def _check_service(name: str, url: str, headers: dict[str, str] | None, timeout:
         response.raise_for_status()
         return True, f"{name} ok"
     except requests.RequestException as exc:
-        return False, f"{name} error: {exc}"
+        return False, f"{name} error: {_safe_error_message(exc)}"
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:

@@ -170,7 +170,7 @@ def request_with_retry(
             time.sleep(delay)
             attempt += 1
             continue
-    return response
+        return response
 
 
 _RATE_LIMIT_STATE: dict[str, list[float]] = {}

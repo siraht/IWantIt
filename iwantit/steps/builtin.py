@@ -22,6 +22,7 @@ from ..util import (
     enforce_rate_limit,
     looks_like_url,
     provider_slot,
+    redact_payload,
     read_cache,
     request_with_retry,
     write_cache,
@@ -121,6 +122,10 @@ def _normalize_text(text: str) -> str:
     cleaned = re.sub(r"[^\w\s]", " ", text.lower())
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned.strip()
+
+
+def _safe_error_message(exc: Exception) -> str:
+    return str(redact_payload(str(exc)))
 
 
 def _normalize_search_query(query: str) -> str:
@@ -575,11 +580,12 @@ def redacted_enrich(
                 if cache_enabled:
                     write_cache(cache_cfg.get("namespace", "redacted"), cache_key(cache_key_payload), payload)
             except (requests.RequestException, json.JSONDecodeError) as exc:
+                message = _safe_error_message(exc)
                 data.setdefault("warnings", []).append(
                     {
                         "step": "redacted_enrich",
                         "type": exc.__class__.__name__,
-                        "message": str(exc),
+                        "message": message,
                     }
                 )
                 continue
@@ -685,11 +691,12 @@ def redacted_comments(
                 response.raise_for_status()
                 payload = response.json()
             except (requests.RequestException, json.JSONDecodeError) as exc:
+                message = _safe_error_message(exc)
                 data.setdefault("warnings", []).append(
                     {
                         "step": "redacted_comments",
                         "type": exc.__class__.__name__,
-                        "message": str(exc),
+                        "message": message,
                     }
                 )
                 break
@@ -734,11 +741,12 @@ def redacted_comments(
                 first.raise_for_status()
                 html = first.text
             except requests.RequestException as exc:
+                message = _safe_error_message(exc)
                 data.setdefault("warnings", []).append(
                     {
                         "step": "redacted_comments",
                         "type": exc.__class__.__name__,
-                        "message": str(exc),
+                        "message": message,
                     }
                 )
                 continue
@@ -769,11 +777,12 @@ def redacted_comments(
                             )
                         resp.raise_for_status()
                     except requests.RequestException as exc:
+                        message = _safe_error_message(exc)
                         data.setdefault("warnings", []).append(
                             {
                                 "step": "redacted_comments",
                                 "type": exc.__class__.__name__,
-                                "message": str(exc),
+                                "message": message,
                             }
                         )
                         break
@@ -1491,15 +1500,16 @@ def identify_web_search(
                 if cache_enabled:
                     write_cache(cache_cfg.get("namespace", "web_search"), key, payload)
     except (requests.RequestException, json.JSONDecodeError) as exc:
+        message = _safe_error_message(exc)
         data.setdefault("search", {})[provider_name] = {
             "query": query,
             "results": [],
             "count": 0,
-            "error": str(exc),
+            "error": message,
             "error_type": exc.__class__.__name__,
         }
         data.setdefault("warnings", []).append(
-            {"step": "identify_web_search", "type": exc.__class__.__name__, "message": str(exc)}
+            {"step": "identify_web_search", "type": exc.__class__.__name__, "message": message}
         )
         return data
 
@@ -1778,7 +1788,18 @@ def prowlarr_search(
                 if cache_enabled:
                     _scrub_payload_urls(payload)
                     write_cache(cache_cfg.get("namespace", "prowlarr"), key, payload)
-    except (requests.RequestException, json.JSONDecodeError):
+    except (requests.RequestException, json.JSONDecodeError) as exc:
+        message = _safe_error_message(exc)
+        data.setdefault("search", {})["prowlarr"] = {
+            "query": query,
+            "count": 0,
+            "results": [],
+            "error": message,
+            "error_type": exc.__class__.__name__,
+        }
+        data.setdefault("warnings", []).append(
+            {"step": "prowlarr_search", "type": exc.__class__.__name__, "message": message}
+        )
         return data
 
     response_cfg = step_cfg.get("response") or search_cfg.get("response", {})
@@ -1921,7 +1942,7 @@ def fetch_url(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) 
         )
         response.raise_for_status()
     except requests.RequestException as exc:
-        data.setdefault("url", {})["error"] = str(exc)
+        data.setdefault("url", {})["error"] = _safe_error_message(exc)
         return data
 
     content_type = (response.headers.get("content-type") or "").lower()
@@ -2298,10 +2319,16 @@ def dedupe_candidates(
             year = year or fields.get("year")
         if not title:
             return ("", "", 0)
+        year_value = 0
+        if year:
+            try:
+                year_value = int(year)
+            except (TypeError, ValueError):
+                year_value = _extract_year(str(year)) or 0
         return (
             str(artist or "").lower(),
             str(title or "").lower(),
-            int(year) if year else 0,
+            year_value,
         )
 
     def merge(base: dict[str, Any], other: dict[str, Any]) -> dict[str, Any]:
