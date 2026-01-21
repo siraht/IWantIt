@@ -213,6 +213,8 @@ def main() -> int:
     env = os.environ.copy()
     env["IWANTIT_CONFIG"] = str(cfg_path)
     env["IWANTIT_SECRETS"] = str(secrets_path)
+    env["XDG_STATE_HOME"] = str(temp_dir / "state")
+    env["XDG_CACHE_HOME"] = str(temp_dir / "cache")
 
     try:
         run1 = _run_cli(
