@@ -7,14 +7,23 @@ import os
 import shlex
 import string
 import subprocess
+import time
+import uuid
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Callable
 
 from .paths import ensure_dir, state_dir
+from .report import write_report
+from .step_metadata import get_step_metadata
+from .util import classify_exception, redact_payload
 
 
 class StepError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, code: str = "STEP_ERROR", hint: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.hint = hint or ""
 
 
 @dataclass
@@ -43,6 +52,20 @@ class SafeMap(dict):
 
 
 _FORMATTER = string.Formatter()
+
+
+def _append_log(data: dict[str, Any], config: dict[str, Any], entry: dict[str, Any]) -> None:
+    data.setdefault("logs", []).append(entry)
+    log_cfg = config.get("logging", {}) or {}
+    path = log_cfg.get("path")
+    if not path:
+        return
+    try:
+        log_path = ensure_dir(Path(path).expanduser().parent) / Path(path).name
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(redact_payload(entry), ensure_ascii=True) + "\n")
+    except OSError:
+        return
 
 
 def _dotify(value: Any) -> Any:
@@ -110,18 +133,34 @@ def run_external(
             timeout=timeout,
         )
     except subprocess.TimeoutExpired as exc:
-        raise StepError(f"step {step} timed out after {exc.timeout}s") from exc
+        raise StepError(
+            f"step {step} timed out after {exc.timeout}s",
+            code="TIMEOUT",
+            hint="Increase timeout or check external command responsiveness.",
+        ) from exc
     if proc.returncode != 0:
-        raise StepError(f"step {step} failed: {proc.stderr.strip()}")
+        raise StepError(
+            f"step {step} failed: {proc.stderr.strip()}",
+            code="STEP_FAILED",
+            hint="Check external command output and configuration.",
+        )
     output = proc.stdout.strip()
     if not output:
         return data
     try:
         result = json.loads(output)
     except json.JSONDecodeError as exc:
-        raise StepError(f"step {step} returned invalid JSON: {exc}") from exc
+        raise StepError(
+            f"step {step} returned invalid JSON: {exc}",
+            code="PARSE_ERROR",
+            hint="Ensure external command prints valid JSON.",
+        ) from exc
     if not isinstance(result, dict):
-        raise StepError(f"step {step} returned non-object JSON")
+        raise StepError(
+            f"step {step} returned non-object JSON",
+            code="PARSE_ERROR",
+            hint="Ensure external command prints a JSON object.",
+        )
     for key in ("_meta", "_config_path"):
         if key in data and key not in result:
             result[key] = data[key]
@@ -151,15 +190,90 @@ def run_step(
     context: Context,
     builtins: dict[str, BuiltinStep],
 ) -> dict[str, Any]:
+    meta = get_step_metadata(step_cfg.get("builtin", step_name) or step_name)
+    if "side_effect" in step_cfg:
+        side_effect = bool(step_cfg.get("side_effect"))
+    else:
+        side_effect = bool(meta.get("side_effect"))
+    run_id = data.get("run_id")
+    start_ts = time.time()
+    start_mono = time.monotonic()
+    _append_log(
+        data,
+        context.config,
+        {
+            "run_id": run_id,
+            "step": step_name,
+            "phase": "start",
+            "ts": start_ts,
+        },
+    )
+    if side_effect and not context.confirm and not context.dry_run:
+        dispatch_key = meta.get("dispatch_key")
+        if not dispatch_key:
+            key_from_cfg = meta.get("dispatch_key_from_cfg")
+            if key_from_cfg and isinstance(step_cfg, dict):
+                dispatch_key = step_cfg.get(key_from_cfg)
+        if not dispatch_key:
+            dispatch_key = step_name
+        data.setdefault("dispatch", {})[str(dispatch_key)] = {
+            "status": "skipped",
+            "reason": "needs_confirm",
+        }
+        data.setdefault("warnings", []).append(
+            {
+                "type": "needs_confirm",
+                "step": step_name,
+                "message": "Side-effect step skipped; rerun with --confirm.",
+            }
+        )
+        _append_log(
+            data,
+            context.config,
+            {
+                "run_id": run_id,
+                "step": step_name,
+                "phase": "end",
+                "status": "skipped",
+                "duration_s": 0.0,
+                "ts": time.time(),
+            },
+        )
+        return data
     if context.dry_run and step_cfg.get("skip_on_dry_run"):
         data.setdefault("dry_run", {})[step_name] = {"skipped": True, "reason": "dry_run"}
+        _append_log(
+            data,
+            context.config,
+            {
+                "run_id": run_id,
+                "step": step_name,
+                "phase": "end",
+                "status": "dry_run",
+                "duration_s": time.monotonic() - start_mono,
+                "ts": time.time(),
+            },
+        )
         return data
     if "command" in step_cfg:
         external_cfg = context.config.get("external_steps", {}) or {}
         timeout = step_cfg.get("timeout")
         if timeout is None:
             timeout = external_cfg.get("timeout")
-        return run_external(step_cfg["command"], data, step_name, timeout=timeout)
+        result = run_external(step_cfg["command"], data, step_name, timeout=timeout)
+        _append_log(
+            data,
+            context.config,
+            {
+                "run_id": run_id,
+                "step": step_name,
+                "phase": "end",
+                "status": "ok",
+                "duration_s": time.monotonic() - start_mono,
+                "ts": time.time(),
+            },
+        )
+        return result
     builtin_name = step_cfg.get("builtin", step_name)
     builtin = builtins.get(builtin_name)
     if not builtin:
@@ -173,7 +287,20 @@ def run_step(
         if key not in merged_cfg and key in retries_cfg:
             merged_cfg[key] = retries_cfg[key]
     merged_cfg.setdefault("_step", step_name)
-    return builtin(data, merged_cfg, context)
+    result = builtin(data, merged_cfg, context)
+    _append_log(
+        data,
+        context.config,
+        {
+            "run_id": run_id,
+            "step": step_name,
+            "phase": "end",
+            "status": "ok",
+            "duration_s": time.monotonic() - start_mono,
+            "ts": time.time(),
+        },
+    )
+    return result
 
 
 def run_workflow(
@@ -196,6 +323,10 @@ def run_workflow(
         dry_run=dry_run,
         confirm=confirm,
     )
+    if "run_id" not in data:
+        run_id = uuid.uuid4().hex
+        data["run_id"] = run_id
+        data.setdefault("_meta", {})["run_id"] = run_id
     started = start_step is None
     saw_start = False
 
@@ -213,9 +344,27 @@ def run_workflow(
             if progress:
                 progress(step_name, "end", data)
         except Exception as exc:
+            code, hint = classify_exception(exc)
+            if isinstance(exc, StepError):
+                code = getattr(exc, "code", code)
+                hint = getattr(exc, "hint", hint)
             data.setdefault("error", {})["message"] = str(exc)
             data["error"]["step"] = step_name
             data["error"]["type"] = exc.__class__.__name__
+            data["error"]["code"] = code
+            data["error"]["hint"] = hint
+            _append_log(
+                data,
+                context.config,
+                {
+                    "run_id": data.get("run_id"),
+                    "step": step_name,
+                    "phase": "end",
+                    "status": "error",
+                    "ts": time.time(),
+                    "error": {"code": code, "message": str(exc)},
+                },
+            )
             data.setdefault("decision", {})["status"] = "error"
             return data
         if end_step and step_name == end_step:
@@ -224,9 +373,12 @@ def run_workflow(
     try:
         workflow = select_workflow(config, data, workflow_name)
     except Exception as exc:
+        code, hint = classify_exception(exc)
         data.setdefault("error", {})["message"] = str(exc)
         data["error"]["step"] = "select_workflow"
         data["error"]["type"] = exc.__class__.__name__
+        data["error"]["code"] = code
+        data["error"]["hint"] = hint
         data.setdefault("decision", {})["status"] = "error"
         return data
     for step_name in workflow.get("steps", []):
@@ -243,9 +395,27 @@ def run_workflow(
             if progress:
                 progress(step_name, "end", data)
         except Exception as exc:
+            code, hint = classify_exception(exc)
+            if isinstance(exc, StepError):
+                code = getattr(exc, "code", code)
+                hint = getattr(exc, "hint", hint)
             data.setdefault("error", {})["message"] = str(exc)
             data["error"]["step"] = step_name
             data["error"]["type"] = exc.__class__.__name__
+            data["error"]["code"] = code
+            data["error"]["hint"] = hint
+            _append_log(
+                data,
+                context.config,
+                {
+                    "run_id": data.get("run_id"),
+                    "step": step_name,
+                    "phase": "end",
+                    "status": "error",
+                    "ts": time.time(),
+                    "error": {"code": code, "message": str(exc)},
+                },
+            )
             data.setdefault("decision", {})["status"] = "error"
             return data
         decision = data.get("decision", {})
@@ -258,4 +428,7 @@ def run_workflow(
         data["error"]["step"] = start_step
         data["error"]["type"] = "StepNotFound"
         data.setdefault("decision", {})["status"] = "error"
+    report_path = write_report(data, context.state_path, config)
+    if report_path:
+        data.setdefault("report", {})["path"] = report_path
     return data

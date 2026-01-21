@@ -8,10 +8,11 @@ import random
 import re
 import sys
 import time
+import threading
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 import requests
 
@@ -169,7 +170,101 @@ def request_with_retry(
             time.sleep(delay)
             attempt += 1
             continue
-        return response
+    return response
+
+
+_RATE_LIMIT_STATE: dict[str, list[float]] = {}
+_PROVIDER_SEMAPHORES: dict[str, threading.Semaphore] = {}
+
+
+def enforce_rate_limit(key: str, requests_per_minute: int | None) -> None:
+    if not key or not requests_per_minute or requests_per_minute <= 0:
+        return
+    window = 60.0
+    now = time.monotonic()
+    bucket = _RATE_LIMIT_STATE.setdefault(key, [])
+    bucket[:] = [ts for ts in bucket if now - ts < window]
+    if len(bucket) >= requests_per_minute:
+        sleep_for = window - (now - bucket[0])
+        if sleep_for > 0:
+            time.sleep(sleep_for)
+    bucket.append(time.monotonic())
+
+
+class provider_slot:
+    def __init__(self, key: str, limit: int | None) -> None:
+        self.key = key
+        self.limit = limit
+        self._sem: threading.Semaphore | None = None
+
+    def __enter__(self) -> None:
+        if not self.key or not self.limit or self.limit <= 0:
+            return None
+        sem = _PROVIDER_SEMAPHORES.get(self.key)
+        if sem is None:
+            sem = threading.Semaphore(self.limit)
+            _PROVIDER_SEMAPHORES[self.key] = sem
+        self._sem = sem
+        sem.acquire()
+        return None
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if self._sem:
+            self._sem.release()
+
+
+_SECRET_KEY_RE = re.compile(r"(api|token|secret|auth|password|key)", re.IGNORECASE)
+_SECRET_PARAM_RE = re.compile(r"(api(?:_|-)?key|token|auth|secret)", re.IGNORECASE)
+
+
+def _redact_string(value: str) -> str:
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return value
+    if not parsed.query:
+        return value
+    params = []
+    for key, val in parse_qsl(parsed.query, keep_blank_values=True):
+        if _SECRET_PARAM_RE.search(key):
+            params.append((key, "***"))
+        else:
+            params.append((key, val))
+    return parsed._replace(query="&".join(f"{k}={v}" for k, v in params)).geturl()
+
+
+def redact_payload(payload: Any) -> Any:
+    if isinstance(payload, dict):
+        redacted: dict[str, Any] = {}
+        for key, value in payload.items():
+            if _SECRET_KEY_RE.search(str(key)):
+                redacted[key] = "***"
+            else:
+                redacted[key] = redact_payload(value)
+        return redacted
+    if isinstance(payload, list):
+        return [redact_payload(item) for item in payload]
+    if isinstance(payload, str):
+        return _redact_string(payload)
+    return payload
+
+
+def classify_exception(exc: Exception) -> tuple[str, str]:
+    if isinstance(exc, requests.HTTPError):
+        status = exc.response.status_code if exc.response is not None else None
+        if status in {401, 403}:
+            return ("AUTH_FAILED", "Check API key or credentials.")
+    if isinstance(exc, requests.Timeout):
+        return ("TIMEOUT", "Increase timeout or check network connectivity.")
+    if isinstance(exc, requests.RequestException):
+        return ("NETWORK_ERROR", "Check network connectivity or provider availability.")
+    if isinstance(exc, json.JSONDecodeError):
+        return ("PARSE_ERROR", "Provider returned invalid JSON; inspect response.")
+    if isinstance(exc, FileNotFoundError):
+        return ("NOT_FOUND", "Verify file paths and configuration.")
+    if isinstance(exc, ValueError):
+        return ("CONFIG_ERROR", "Check configuration values and formats.")
+    return ("STEP_ERROR", "Inspect error message and configuration.")
 
 
 def _cache_path(namespace: str, key: str) -> Path:
