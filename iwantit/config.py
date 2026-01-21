@@ -8,6 +8,9 @@ from typing import Any
 import yaml
 
 from .paths import config_path, ensure_dir, secrets_path
+from .plugins import discover_plugins
+from .registry import validate_registry_requirements
+from .schema import validate_config_schema
 from .util import deep_merge, resolve_env_values
 
 
@@ -31,6 +34,7 @@ def default_config() -> dict[str, Any]:
                     "prowlarr_search",
                     "filter_candidates",
                     "filter_match",
+                    "dedupe_candidates",
                     "redacted_enrich",
                     "filter_by_version",
                     "rank_releases",
@@ -56,6 +60,7 @@ def default_config() -> dict[str, Any]:
                     "prowlarr_search",
                     "filter_candidates",
                     "filter_match",
+                    "dedupe_candidates",
                     "book_decide",
                     "rank_releases",
                     "decide",
@@ -118,6 +123,13 @@ def default_config() -> dict[str, Any]:
                 "auto_select_formats": True,
                 "auto_select_explicit": True,
                 "min_confidence": 0.6,
+                "confidence_weights": {
+                    "rank_margin": 0.35,
+                    "match": 0.2,
+                    "completeness": 0.2,
+                    "consensus": 0.15,
+                    "rank_score": 0.1,
+                },
             },
             "prowlarr_search": {
                 "builtin": "prowlarr_search",
@@ -141,6 +153,7 @@ def default_config() -> dict[str, Any]:
                 "min_token_matches": 2,
                 "keep_original_on_empty": False,
             },
+            "dedupe_candidates": {"builtin": "dedupe_candidates"},
             "extract_release_preferences": {
                 "builtin": "extract_release_preferences",
                 "edition_keywords": {
@@ -308,6 +321,20 @@ def default_config() -> dict[str, Any]:
         },
         "diagnostics": {
             "failed_queries": {"enabled": True},
+        },
+        "logging": {
+            "path": None,
+        },
+        "report": {
+            "enabled": False,
+        },
+        "rate_limits": {},
+        "concurrency": {
+            "default": 1,
+            "providers": {},
+        },
+        "plugins": {
+            "paths": [],
         },
         "quality_rules": {
             "music": {
@@ -485,7 +512,17 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         with secrets_file.open("r", encoding="utf-8") as handle:
             secrets = yaml.safe_load(handle) or {}
     merged = deep_merge(config, secrets)
-    return resolve_env_values(merged)
+    merged = resolve_env_values(merged)
+    plugin_steps, plugin_meta = discover_plugins(merged, Path.cwd())
+    if plugin_steps:
+        merged_steps = dict(merged.get("steps", {}) or {})
+        for name, cfg in plugin_steps.items():
+            if name not in merged_steps:
+                merged_steps[name] = cfg
+        merged["steps"] = merged_steps
+    if plugin_meta:
+        merged["_plugins"] = plugin_meta
+    return merged
 
 
 def save_default_config(path: Path | None = None, overwrite: bool = False) -> Path:
@@ -524,6 +561,10 @@ def ensure_config_exists(path_str: str | None = None) -> Path:
 def validate_config(config: dict[str, Any], builtins: list[str]) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
+
+    schema_errors = validate_config_schema(config)
+    for error in schema_errors:
+        errors.append(f"schema: {error}")
 
     steps = config.get("steps", {}) or {}
     for name, step in steps.items():
@@ -564,5 +605,9 @@ def validate_config(config: dict[str, Any], builtins: list[str]) -> tuple[list[s
             errors.append("redacted.url is required")
         if not redacted.get("api_key") or redacted.get("api_key") == "CHANGE_ME":
             warnings.append("redacted.api_key is not set")
+
+    registry_errors, registry_warnings = validate_registry_requirements(config)
+    errors.extend(registry_errors)
+    warnings.extend(registry_warnings)
 
     return errors, warnings

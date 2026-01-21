@@ -14,8 +14,18 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import requests
 
+from ..canonical import canonical_schema, merge_from_work, set_field
 from ..pipeline import Context, render_template
-from ..util import cache_key, looks_like_url, read_cache, request_with_retry, write_cache
+from ..registry import provider_concurrency, provider_rate_limit
+from ..util import (
+    cache_key,
+    enforce_rate_limit,
+    looks_like_url,
+    provider_slot,
+    read_cache,
+    request_with_retry,
+    write_cache,
+)
 
 
 def identify(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> dict[str, Any]:
@@ -32,6 +42,7 @@ def identify(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -
         "candidates": request.get("candidates", []),
     }
     data["work"] = work
+    merge_from_work(data, source="input")
     return data
 
 
@@ -546,17 +557,19 @@ def redacted_enrich(
             url = f"{base_url}/ajax.php"
             params = {"action": "torrentgroup", "id": group_id}
             try:
-                response = request_with_retry(
-                    "GET",
-                    url,
-                    headers={"Authorization": api_key},
-                    params=params,
-                    timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
-                    retries=int(step_cfg.get("retries") or 0),
-                    backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-                    max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-                    retry_statuses=step_cfg.get("retry_statuses"),
-                )
+                with provider_slot("redacted", provider_concurrency(context.config, "redacted")):
+                    enforce_rate_limit("redacted", provider_rate_limit(context.config, "redacted"))
+                    response = request_with_retry(
+                        "GET",
+                        url,
+                        headers={"Authorization": api_key},
+                        params=params,
+                        timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
+                        retries=int(step_cfg.get("retries") or 0),
+                        backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
+                        max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
+                        retry_statuses=step_cfg.get("retry_statuses"),
+                    )
                 response.raise_for_status()
                 payload = response.json()
                 if cache_enabled:
@@ -656,17 +669,19 @@ def redacted_comments(
             url = f"{base_url}/ajax.php"
             params = {"action": "torrentgroup", "id": group_id, "page": page}
             try:
-                response = request_with_retry(
-                    "GET",
-                    url,
-                    headers={"Authorization": api_key},
-                    params=params,
-                    timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
-                    retries=int(step_cfg.get("retries") or 0),
-                    backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-                    max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-                    retry_statuses=step_cfg.get("retry_statuses"),
-                )
+                with provider_slot("redacted", provider_concurrency(context.config, "redacted")):
+                    enforce_rate_limit("redacted", provider_rate_limit(context.config, "redacted"))
+                    response = request_with_retry(
+                        "GET",
+                        url,
+                        headers={"Authorization": api_key},
+                        params=params,
+                        timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
+                        retries=int(step_cfg.get("retries") or 0),
+                        backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
+                        max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
+                        retry_statuses=step_cfg.get("retry_statuses"),
+                    )
                 response.raise_for_status()
                 payload = response.json()
             except (requests.RequestException, json.JSONDecodeError) as exc:
@@ -703,17 +718,19 @@ def redacted_comments(
             url = f"{base_url}/torrents.php"
             cookies = {"session": session_cookie}
             try:
-                first = request_with_retry(
-                    "GET",
-                    url,
-                    params={"id": group_id},
-                    cookies=cookies,
-                    timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
-                    retries=int(step_cfg.get("retries") or 0),
-                    backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-                    max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-                    retry_statuses=step_cfg.get("retry_statuses"),
-                )
+                with provider_slot("redacted", provider_concurrency(context.config, "redacted")):
+                    enforce_rate_limit("redacted", provider_rate_limit(context.config, "redacted"))
+                    first = request_with_retry(
+                        "GET",
+                        url,
+                        params={"id": group_id},
+                        cookies=cookies,
+                        timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
+                        retries=int(step_cfg.get("retries") or 0),
+                        backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
+                        max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
+                        retry_statuses=step_cfg.get("retry_statuses"),
+                    )
                 first.raise_for_status()
                 html = first.text
             except requests.RequestException as exc:
@@ -737,17 +754,19 @@ def redacted_comments(
                     if page == 1:
                         continue
                     try:
-                        resp = request_with_retry(
-                            "GET",
-                            url,
-                            params={"id": group_id, "page": page},
-                            cookies=cookies,
-                            timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
-                            retries=int(step_cfg.get("retries") or 0),
-                            backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-                            max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-                            retry_statuses=step_cfg.get("retry_statuses"),
-                        )
+                        with provider_slot("redacted", provider_concurrency(context.config, "redacted")):
+                            enforce_rate_limit("redacted", provider_rate_limit(context.config, "redacted"))
+                            resp = request_with_retry(
+                                "GET",
+                                url,
+                                params={"id": group_id, "page": page},
+                                cookies=cookies,
+                                timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
+                                retries=int(step_cfg.get("retries") or 0),
+                                backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
+                                max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
+                                retry_statuses=step_cfg.get("retry_statuses"),
+                            )
                         resp.raise_for_status()
                     except requests.RequestException as exc:
                         data.setdefault("warnings", []).append(
@@ -1451,23 +1470,26 @@ def identify_web_search(
         if cache_hit:
             payload = cache_value
         else:
-            response = request_with_retry(
-                method,
-                url,
-                headers=headers,
-                params=params,
-                json=json_body,
-                data=form,
-                timeout=step_cfg.get("timeout", provider_cfg.get("timeout", 20)),
-                retries=int(step_cfg.get("retries") or 0),
-                backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-                max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-                retry_statuses=step_cfg.get("retry_statuses"),
-            )
-            response.raise_for_status()
-            payload = response.json()
-            if cache_enabled:
-                write_cache(cache_cfg.get("namespace", "web_search"), key, payload)
+            provider_key = f"web_search.{provider_name}"
+            with provider_slot(provider_key, provider_concurrency(context.config, provider_key)):
+                enforce_rate_limit(provider_key, provider_rate_limit(context.config, provider_key))
+                response = request_with_retry(
+                    method,
+                    url,
+                    headers=headers,
+                    params=params,
+                    json=json_body,
+                    data=form,
+                    timeout=step_cfg.get("timeout", provider_cfg.get("timeout", 20)),
+                    retries=int(step_cfg.get("retries") or 0),
+                    backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
+                    max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
+                    retry_statuses=step_cfg.get("retry_statuses"),
+                )
+                response.raise_for_status()
+                payload = response.json()
+                if cache_enabled:
+                    write_cache(cache_cfg.get("namespace", "web_search"), key, payload)
     except (requests.RequestException, json.JSONDecodeError) as exc:
         data.setdefault("search", {})[provider_name] = {
             "query": query,
@@ -1582,6 +1604,7 @@ def identify_web_search(
 
     data["work"] = work
     data["request"] = request
+    merge_from_work(data, source="web_search")
     return data
 
 
@@ -1735,24 +1758,26 @@ def prowlarr_search(
         if cache_hit:
             payload = cache_value
         else:
-            response = request_with_retry(
-                method,
-                url,
-                headers=headers,
-                params=params,
-                json=json_body,
-                data=form,
-                timeout=step_cfg.get("timeout", prow_cfg.get("timeout", 30)),
-                retries=int(step_cfg.get("retries") or 0),
-                backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-                max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-                retry_statuses=step_cfg.get("retry_statuses"),
-            )
-            response.raise_for_status()
-            payload = response.json()
-            if cache_enabled:
-                _scrub_payload_urls(payload)
-                write_cache(cache_cfg.get("namespace", "prowlarr"), key, payload)
+            with provider_slot("prowlarr", provider_concurrency(context.config, "prowlarr")):
+                enforce_rate_limit("prowlarr", provider_rate_limit(context.config, "prowlarr"))
+                response = request_with_retry(
+                    method,
+                    url,
+                    headers=headers,
+                    params=params,
+                    json=json_body,
+                    data=form,
+                    timeout=step_cfg.get("timeout", prow_cfg.get("timeout", 30)),
+                    retries=int(step_cfg.get("retries") or 0),
+                    backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
+                    max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
+                    retry_statuses=step_cfg.get("retry_statuses"),
+                )
+                response.raise_for_status()
+                payload = response.json()
+                if cache_enabled:
+                    _scrub_payload_urls(payload)
+                    write_cache(cache_cfg.get("namespace", "prowlarr"), key, payload)
     except (requests.RequestException, json.JSONDecodeError):
         return data
 
@@ -1966,6 +1991,10 @@ def fetch_url(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) 
         "release_date": release_date,
         "release_year": release_year,
     }
+    if meta.get("title"):
+        set_field(data, "title", meta.get("title"), source="url")
+    if release_year:
+        set_field(data, "year", release_year, source="url")
 
     if not request.get("query_original"):
         request["query_original"] = request.get("query") or url
@@ -2200,6 +2229,11 @@ def filter_match(
         text = _get_candidate_text(candidate, title_fields)
         candidate_tokens = set(_tokenize(text))
         score = _match_score(candidate_tokens, query_tokens)
+        derived = candidate.get("derived")
+        if isinstance(derived, dict):
+            derived.setdefault("match_score", score)
+        else:
+            candidate["derived"] = {"match_score": score}
         if score < min_match_ratio or len(candidate_tokens & query_tokens) < min_token_matches:
             removed += 1
             continue
@@ -2217,6 +2251,95 @@ def filter_match(
         return data
 
     work["candidates"] = filtered
+    data["work"] = work
+    return data
+
+
+def dedupe_candidates(
+    data: dict[str, Any], step_cfg: dict[str, Any], context: Context
+) -> dict[str, Any]:
+    work = data.get("work", {})
+    candidates = work.get("candidates", []) or []
+    if not candidates:
+        return data
+    media_type = work.get("media_type") or data.get("request", {}).get("media_type")
+    title_fields = step_cfg.get("title_fields") or [
+        "title",
+        "name",
+        "_raw.title",
+        "_raw.name",
+        "releaseTitle",
+        "release_title",
+    ]
+
+    def candidate_source(candidate: dict[str, Any]) -> str | None:
+        for key in ("indexer", "indexer_id", "provider", "source"):
+            value = candidate.get(key)
+            if value:
+                return str(value)
+        raw = candidate.get("_raw")
+        if isinstance(raw, dict):
+            value = raw.get("indexer") or raw.get("indexerId")
+            if value:
+                return str(value)
+        return None
+
+    def candidate_key(candidate: dict[str, Any]) -> tuple[str, str, int]:
+        if not isinstance(candidate, dict):
+            return ("", "", 0)
+        artist = candidate.get("artist")
+        title = candidate.get("title") or candidate.get("name")
+        year = candidate.get("year")
+        if not title:
+            text = _get_candidate_text(candidate, title_fields)
+            fields = _extract_fields_from_title(media_type, text)
+            artist = artist or fields.get("artist")
+            title = title or fields.get("title")
+            year = year or fields.get("year")
+        if not title:
+            return ("", "", 0)
+        return (
+            str(artist or "").lower(),
+            str(title or "").lower(),
+            int(year) if year else 0,
+        )
+
+    def merge(base: dict[str, Any], other: dict[str, Any]) -> dict[str, Any]:
+        merged = dict(base)
+        for key, value in other.items():
+            if key not in merged or merged[key] in (None, "", [], {}):
+                merged[key] = value
+        sources = set(merged.get("sources") or [])
+        source = candidate_source(other)
+        if source:
+            sources.add(source)
+        if sources:
+            merged["sources"] = sorted(sources)
+        merged_from = list(merged.get("merged_from") or [])
+        merged_from.append(other.get("guid") or other.get("id") or other.get("title") or "")
+        merged["merged_from"] = [item for item in merged_from if item]
+        return merged
+
+    deduped: dict[tuple[str, str, int], dict[str, Any]] = {}
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        key = candidate_key(candidate)
+        if key == ("", "", 0):
+            deduped[(str(id(candidate)), "", 0)] = candidate
+            continue
+        if key in deduped:
+            deduped[key] = merge(deduped[key], candidate)
+        else:
+            deduped[key] = candidate
+
+    merged = list(deduped.values())
+    if len(merged) != len(candidates):
+        data.setdefault("filter", {})["dedupe"] = {
+            "before": len(candidates),
+            "after": len(merged),
+        }
+    work["candidates"] = merged
     data["work"] = work
     return data
 
@@ -2462,42 +2585,21 @@ def prowlarr_grab(
         }
         data["work"] = work
         return data
-    if not context.confirm:
-        data.setdefault("dispatch", {})["prowlarr"] = {
-            "status": "skipped",
-            "reason": "needs_confirm",
-            "request": {
-                "method": method,
-                "url": _redact_apikey(url),
-                "headers": _redact_headers(headers),
-                "params": params,
-                "json": json_body,
-                "form": form,
-            },
-        }
-        data.setdefault("warnings", []).append(
-            {
-                "type": "needs_confirm",
-                "step": "prowlarr_grab",
-                "message": "Dispatch skipped; rerun with --confirm to allow downloads.",
-            }
+    with provider_slot("prowlarr", provider_concurrency(context.config, "prowlarr")):
+        enforce_rate_limit("prowlarr", provider_rate_limit(context.config, "prowlarr"))
+        response = request_with_retry(
+            method,
+            url,
+            headers=headers,
+            params=params,
+            json=json_body,
+            data=form,
+            timeout=step_cfg.get("timeout", prow_cfg.get("timeout", 30)),
+            retries=int(step_cfg.get("retries") or 0),
+            backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
+            max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
+            retry_statuses=step_cfg.get("retry_statuses"),
         )
-        data["work"] = work
-        return data
-
-    response = request_with_retry(
-        method,
-        url,
-        headers=headers,
-        params=params,
-        json=json_body,
-        data=form,
-        timeout=step_cfg.get("timeout", prow_cfg.get("timeout", 30)),
-        retries=int(step_cfg.get("retries") or 0),
-        backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-        max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-        retry_statuses=step_cfg.get("retry_statuses"),
-    )
     response.raise_for_status()
     try:
         payload = response.json()
@@ -2517,18 +2619,19 @@ def decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> 
     request = data.get("request", {}) or {}
     work = data.get("work", {})
     preselected = work.get("selected")
+    media_type = work.get("media_type") or data.get("request", {}).get("media_type")
 
     def _compute_confidence(
         items: list[Any], selected_item: Any, index: int | None
-    ) -> float | None:
+    ) -> tuple[float | None, dict[str, float]]:
         if not items or selected_item is None:
-            return None
+            return None, {}
         if index is None and selected_item in items:
             index = items.index(selected_item)
         if index is None:
-            return None
+            return None, {}
         if len(items) == 1:
-            return 1.0
+            return 1.0, {"rank_margin": 1.0}
         scores: list[float | None] = []
         for candidate in items:
             score_val = None
@@ -2543,30 +2646,93 @@ def decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> 
         selected_score = scores[index]
         other_scores = [score for idx, score in enumerate(scores) if idx != index and score is not None]
         if selected_score is None or not other_scores:
-            return None
+            return None, {}
         second_score = max(other_scores)
         denom = max(abs(selected_score), 1.0)
-        confidence = (selected_score - second_score) / denom
-        if confidence < 0:
-            confidence = 0.0
-        elif confidence > 1:
-            confidence = 1.0
-        return confidence
+        rank_margin = (selected_score - second_score) / denom
+        if rank_margin < 0:
+            rank_margin = 0.0
+        elif rank_margin > 1:
+            rank_margin = 1.0
+
+        candidate = items[index] if isinstance(items[index], dict) else {}
+        match_score = None
+        derived = candidate.get("derived") if isinstance(candidate, dict) else None
+        if isinstance(derived, dict):
+            match_score = derived.get("match_score")
+        if match_score is None:
+            text = _get_candidate_text(candidate, ["title", "name", "_raw.title", "_raw.name"])
+            query = request.get("query") or ""
+            match_score = _match_score(set(_tokenize(text)), set(_tokenize(query)))
+        try:
+            match_signal = float(match_score)
+        except (TypeError, ValueError):
+            match_signal = 0.0
+
+        required = canonical_schema(media_type)
+        fields = (data.get("canonical") or {}).get("fields", {})
+        if not required:
+            completeness = 0.5
+        else:
+            present = 0
+            for field in required:
+                if fields.get(field) or work.get(field):
+                    present += 1
+            completeness = present / max(len(required), 1)
+
+        provenance = (data.get("canonical") or {}).get("provenance", {})
+        sources = set()
+        for field in required:
+            prov = provenance.get(field) or {}
+            sources.update(prov.get("sources") or [])
+        consensus = min(1.0, len(sources) / 3) if sources else 0.0
+
+        try:
+            rank_score_norm = min(1.0, float(selected_score) / 200.0)
+        except (TypeError, ValueError):
+            rank_score_norm = 0.0
+
+        breakdown = {
+            "rank_margin": rank_margin,
+            "match": max(0.0, min(match_signal, 1.0)),
+            "completeness": max(0.0, min(completeness, 1.0)),
+            "consensus": max(0.0, min(consensus, 1.0)),
+            "rank_score": max(0.0, min(rank_score_norm, 1.0)),
+        }
+        weights = step_cfg.get("confidence_weights") or {
+            "rank_margin": 0.35,
+            "match": 0.2,
+            "completeness": 0.2,
+            "consensus": 0.15,
+            "rank_score": 0.1,
+        }
+        total_weight = 0.0
+        total = 0.0
+        for key, value in breakdown.items():
+            weight = float(weights.get(key, 0.0))
+            total += value * weight
+            total_weight += weight
+        confidence = total / total_weight if total_weight else 0.0
+        confidence = max(0.0, min(confidence, 1.0))
+        return confidence, breakdown
 
     def _apply_confidence(
         decision: dict[str, Any], selected_item: Any, index: int | None, *, enforce: bool = True
     ) -> dict[str, Any]:
         min_confidence = step_cfg.get("min_confidence")
+        if isinstance(min_confidence, dict):
+            min_confidence = min_confidence.get(media_type) or min_confidence.get("default")
         if min_confidence is None:
             min_confidence = 0.6
         try:
             min_confidence_val = float(min_confidence)
         except (TypeError, ValueError):
             return decision
-        confidence = _compute_confidence(candidates, selected_item, index)
+        confidence, breakdown = _compute_confidence(candidates, selected_item, index)
         if confidence is None:
             confidence = 0.0
         decision["confidence"] = confidence
+        decision["confidence_breakdown"] = breakdown
         decision["min_confidence"] = min_confidence_val
         if enforce and confidence < min_confidence_val:
             work.pop("selected", None)
@@ -2575,6 +2741,7 @@ def decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> 
                 "reason": "low_confidence",
                 "options": candidates,
                 "confidence": confidence,
+                "confidence_breakdown": breakdown,
                 "min_confidence": min_confidence_val,
             }
         return decision
@@ -2626,7 +2793,6 @@ def decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> 
         data["decision"] = _apply_confidence(decision, selected, 0)
         return data
 
-    media_type = work.get("media_type") or data.get("request", {}).get("media_type")
     auto_formats = step_cfg.get("auto_select_formats")
     if auto_formats is None:
         auto_formats = True
@@ -2885,28 +3051,6 @@ def dispatch_http(data: dict[str, Any], step_cfg: dict[str, Any], context: Conte
             },
         }
         return data
-    if not context.confirm:
-        data.setdefault("dispatch", {})[step_key] = {
-            "status": "skipped",
-            "reason": "needs_confirm",
-            "request": {
-                "method": method,
-                "url": _redact_apikey(url),
-                "headers": _redact_headers(headers),
-                "params": params,
-                "json": json_body,
-                "form": form,
-                "file": file_path,
-            },
-        }
-        data.setdefault("warnings", []).append(
-            {
-                "type": "needs_confirm",
-                "step": step_key,
-                "message": "Dispatch skipped; rerun with --confirm to allow HTTP dispatch.",
-            }
-        )
-        return data
     if file_path:
         path = Path(file_path)
         if not path.exists():
@@ -3016,25 +3160,6 @@ def dispatch_arr(data: dict[str, Any], step_cfg: dict[str, Any], context: Contex
             },
         }
         return data
-    if not context.confirm:
-        data.setdefault("dispatch", {})[arr_name] = {
-            "status": "skipped",
-            "reason": "needs_confirm",
-            "request": {
-                "method": "POST",
-                "url": url,
-                "headers": _redact_headers(headers),
-                "json": payload,
-            },
-        }
-        data.setdefault("warnings", []).append(
-            {
-                "type": "needs_confirm",
-                "step": arr_name,
-                "message": f"Dispatch skipped; rerun with --confirm to allow {arr_name} dispatch.",
-            }
-        )
-        return data
     response = request_with_retry(
         "POST",
         url,
@@ -3095,6 +3220,7 @@ BUILTINS = {
     "prowlarr_search": prowlarr_search,
     "filter_candidates": filter_candidates,
     "filter_match": filter_match,
+    "dedupe_candidates": dedupe_candidates,
     "fetch_url": fetch_url,
     "resolve_track_release": resolve_track_release,
     "redacted_enrich": redacted_enrich,
