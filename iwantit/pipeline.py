@@ -85,7 +85,12 @@ def render_template(obj: Any, data: dict[str, Any], config: dict[str, Any]) -> A
     return _render_value(obj, ctx)
 
 
-def run_external(command: str | list[str], data: dict[str, Any], step: str) -> dict[str, Any]:
+def run_external(
+    command: str | list[str],
+    data: dict[str, Any],
+    step: str,
+    timeout: float | None = None,
+) -> dict[str, Any]:
     if isinstance(command, str):
         cmd = shlex.split(command)
     else:
@@ -94,13 +99,17 @@ def run_external(command: str | list[str], data: dict[str, Any], step: str) -> d
     config_path = (data.get("_meta") or {}).get("config_path") or data.get("_config_path")
     if config_path:
         env["IWANTIT_CONFIG"] = str(config_path)
-    proc = subprocess.run(
-        cmd,
-        input=json.dumps(data),
-        text=True,
-        capture_output=True,
-        env=env,
-    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            input=json.dumps(data),
+            text=True,
+            capture_output=True,
+            env=env,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise StepError(f"step {step} timed out after {exc.timeout}s") from exc
     if proc.returncode != 0:
         raise StepError(f"step {step} failed: {proc.stderr.strip()}")
     output = proc.stdout.strip()
@@ -131,14 +140,7 @@ def select_workflow(config: dict[str, Any], data: dict[str, Any], name: str | No
             match = wf.get("match", {})
             if match.get("media_type") == media_type:
                 return wf
-    default_name = config.get("default_workflow")
-    if default_name:
-        for wf in workflows:
-            if wf.get("name") == default_name:
-                return wf
-    if workflows:
-        return workflows[0]
-    raise StepError("no workflows configured")
+    raise StepError("media type not determined; rerun with --media-type or --workflow")
 
 
 def run_step(
@@ -152,7 +154,11 @@ def run_step(
         data.setdefault("dry_run", {})[step_name] = {"skipped": True, "reason": "dry_run"}
         return data
     if "command" in step_cfg:
-        return run_external(step_cfg["command"], data, step_name)
+        external_cfg = context.config.get("external_steps", {}) or {}
+        timeout = step_cfg.get("timeout")
+        if timeout is None:
+            timeout = external_cfg.get("timeout")
+        return run_external(step_cfg["command"], data, step_name, timeout=timeout)
     builtin_name = step_cfg.get("builtin", step_name)
     builtin = builtins.get(builtin_name)
     if not builtin:

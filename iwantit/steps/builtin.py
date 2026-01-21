@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html as html_lib
 import json
 import re
 import subprocess
@@ -296,6 +297,10 @@ def _extract_page_meta(html: str) -> dict[str, str | None]:
         )
         if match:
             description = match.group(1).strip()
+    if title:
+        title = html_lib.unescape(title)
+    if description:
+        description = html_lib.unescape(description)
     return {"title": title, "description": description}
 
 
@@ -1420,7 +1425,17 @@ def identify_web_search(
             payload = response.json()
             if cache_enabled:
                 write_cache(cache_cfg.get("namespace", "web_search"), key, payload)
-    except (requests.RequestException, json.JSONDecodeError):
+    except (requests.RequestException, json.JSONDecodeError) as exc:
+        data.setdefault("search", {})[provider_name] = {
+            "query": query,
+            "results": [],
+            "count": 0,
+            "error": str(exc),
+            "error_type": exc.__class__.__name__,
+        }
+        data.setdefault("warnings", []).append(
+            {"step": "identify_web_search", "type": exc.__class__.__name__, "message": str(exc)}
+        )
         return data
 
     response_cfg = provider_cfg.get("response", {})

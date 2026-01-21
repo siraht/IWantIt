@@ -8,6 +8,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from .config import (
     ensure_config_exists,
@@ -20,6 +21,7 @@ from .pipeline import Context, run_workflow
 from .paths import ensure_dir, state_dir
 from .steps.builtin import BUILTINS
 from .util import (
+    cache_key,
     coerce_tags,
     is_stdin_tty,
     is_stdout_tty,
@@ -115,6 +117,7 @@ def _finalize_output(data: Any) -> dict[str, Any]:
     data.setdefault("search", {})
     data.setdefault("dispatch", {})
     data.setdefault("tags", {})
+    data.setdefault("warnings", [])
     if data.get("error") and data["decision"].get("status") != "error":
         data["decision"]["status"] = "error"
     return data
@@ -147,6 +150,37 @@ def _should_log_failure(result: dict[str, Any]) -> tuple[bool, list[str]]:
     return (len(reasons) > 0), reasons
 
 
+def _hash_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        value = str(value)
+    value = value.strip()
+    if not value:
+        return None
+    return cache_key({"value": value})
+
+
+def _sanitize_input(value: Any) -> dict[str, Any]:
+    info: dict[str, Any] = {"length": None, "hash": None, "domain": None}
+    if value is None:
+        return info
+    if not isinstance(value, str):
+        value = str(value)
+    value = value.strip()
+    if not value:
+        return info
+    info["length"] = len(value)
+    info["hash"] = _hash_value(value)
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return info
+    if parsed.scheme and parsed.netloc:
+        info["domain"] = parsed.netloc
+    return info
+
+
 def _log_failed_query(result: dict[str, Any]) -> None:
     should_log, reasons = _should_log_failure(result)
     if not should_log:
@@ -154,21 +188,42 @@ def _log_failed_query(result: dict[str, Any]) -> None:
     work = result.get("work") or {}
     request = result.get("request") or {}
     search = result.get("search") or {}
+    url_meta = result.get("url") or {}
+    sanitized_url = None
+    if isinstance(url_meta, dict):
+        domain = None
+        try:
+            url_val = url_meta.get("url")
+            if isinstance(url_val, str):
+                parsed = urlparse(url_val)
+                if parsed.netloc:
+                    domain = parsed.netloc
+        except ValueError:
+            domain = None
+        sanitized_url = {
+            "domain": domain,
+            "release_date": url_meta.get("release_date"),
+            "release_year": url_meta.get("release_year"),
+        }
     entry = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "reasons": reasons,
-        "input": request.get("input"),
+        "input": _sanitize_input(request.get("input")),
         "input_type": request.get("input_type"),
-        "query": request.get("query"),
-        "query_original": request.get("query_original"),
+        "query": _sanitize_input(request.get("query")),
+        "query_original": _sanitize_input(request.get("query_original")),
         "media_type": work.get("media_type") or request.get("media_type"),
         "work": {
             "artist": work.get("artist"),
             "title": work.get("title"),
             "year": work.get("year"),
         },
-        "decision": result.get("decision"),
-        "url": result.get("url"),
+        "decision": {
+            "status": (result.get("decision") or {}).get("status"),
+            "reason": (result.get("decision") or {}).get("reason"),
+            "index": (result.get("decision") or {}).get("index"),
+        },
+        "url": sanitized_url,
         "search_counts": {
             key: (val.get("count") if isinstance(val, dict) else None)
             for key, val in search.items()
@@ -178,6 +233,53 @@ def _log_failed_query(result: dict[str, Any]) -> None:
     path = ensure_dir(base / _FAILED_QUERIES_REL.parent) / _FAILED_QUERIES_REL.name
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, ensure_ascii=True) + "\n")
+
+
+def _print_result_summary(result: dict[str, Any], args: argparse.Namespace) -> None:
+    if getattr(args, "quiet", False):
+        return
+    if not sys.stderr.isatty():
+        return
+    request = result.get("request") or {}
+    work = result.get("work") or {}
+    decision = result.get("decision") or {}
+    media_type = work.get("media_type") or request.get("media_type") or "unknown"
+    artist = work.get("artist")
+    title = work.get("title")
+    year = work.get("year")
+    if artist and title:
+        suffix = f" ({year})" if year else ""
+        sys.stderr.write(f"Parsed: {artist} — {title}{suffix}\n")
+    elif title:
+        suffix = f" ({year})" if year else ""
+        sys.stderr.write(f"Parsed: {title}{suffix}\n")
+    sys.stderr.write(f"Media: {media_type}\n")
+    query = request.get("query")
+    if isinstance(query, str) and query.strip():
+        sys.stderr.write(f"Query: {query}\n")
+    status = decision.get("status") or "unknown"
+    reason = decision.get("reason")
+    if reason:
+        sys.stderr.write(f"Decision: {status} ({reason})\n")
+    else:
+        sys.stderr.write(f"Decision: {status}\n")
+    warnings = result.get("warnings") or []
+    if warnings:
+        sys.stderr.write("Warnings:\n")
+        for warning in warnings[:3]:
+            if isinstance(warning, dict):
+                step = warning.get("step") or "unknown"
+                msg = warning.get("message") or warning.get("type") or "unknown"
+                sys.stderr.write(f"- {step}: {msg}\n")
+            else:
+                sys.stderr.write(f"- {warning}\n")
+        if len(warnings) > 3:
+            sys.stderr.write(f"- (+{len(warnings) - 3} more)\n")
+    if status == "needs_choice":
+        sys.stderr.write("Next: pipe to chooser with `iwantit choose --stdin`\n")
+        sys.stderr.write("Example: `iwantit run ... | iwantit choose --stdin --interactive`\n")
+    if status == "error":
+        sys.stderr.write("Next: rerun with `--media-type` or `--workflow` if detection is wrong.\n")
 
 
 def _slim_categories(value: Any) -> Any:
@@ -373,6 +475,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         result.pop("_config_path", None)
     result = _finalize_output(result)
     _log_failed_query(result)
+    _print_result_summary(result, args)
     if not args.full:
         result = _compact_output(result)
     write_json(result)

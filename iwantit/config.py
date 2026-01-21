@@ -463,6 +463,7 @@ def default_config() -> dict[str, Any]:
                 "endpoint": "/api/v3/series",
             },
         },
+        "external_steps": {"timeout": 60},
         "timeouts": {},
         "retries": {"retries": 1, "retry_backoff_seconds": 0.5, "max_backoff_seconds": 4.0},
     }
