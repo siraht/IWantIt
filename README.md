@@ -18,6 +18,10 @@ Get productive first; customize later.
 uv tool install .
 iwantit init
 ```
+If your shell does not see `iwantit` yet:
+```bash
+uv tool update-shell
+```
 
 2) Run a safe test:
 ```bash
@@ -35,6 +39,9 @@ Integration points (all configurable in `~/.config/iwantit/config.yaml`):
 - Web search providers (Kagi/Brave) for release verification
 - Optional tracker enrichment (Redacted)
 - Custom HTTP or external command steps
+
+### Optional dependencies
+- OCR uses `tesseract`. Install it if you want to pass screenshots via `--image`.
 
 ### Help and automation essentials
 ```bash
@@ -217,6 +224,11 @@ uv tool update-shell
 uv tool install git+https://github.com/<you>/iwantit.git
 ```
 
+### Install from PyPI (after publishing)
+```bash
+uv tool install iwantit
+```
+
 ### Development
 ```bash
 uv venv
@@ -230,33 +242,15 @@ uv build
 uv publish
 ```
 
-## Quick start
-If installing locally:
+## Testing
+Unit tests:
 ```bash
-uv tool install .
-```
-If `iwantit` isn't found, run:
-```bash
-uv tool update-shell
+python3 -m unittest discover -s tests
 ```
 
-After publishing to PyPI:
+Functional smoke tests (offline, stubbed providers):
 ```bash
-uv tool install iwantit
-```
-
-Then:
-```bash
-iwantit init
-
-# dry run (no side effects)
-iwantit run --text "Pink Floyd - Dark Side of the Moon"
-
-# real run (dispatch/grabs)
-iwantit run --text "Bernard Badie - Bones [2011]" --confirm
-
-# URL input
-iwantit run --url "https://www.youtube.com/watch?v=naD6-V5CLk0" --dry-run
+python3 scripts/functional_test.py --verbose
 ```
 
 ## CLI commands
