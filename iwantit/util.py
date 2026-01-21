@@ -71,6 +71,9 @@ def looks_like_url(value: Any) -> bool:
         return True
     if lower.startswith("www.") and " " not in lower and "." in lower[4:]:
         return True
+    if " " not in lower:
+        if re.match(r"^[a-z0-9-]+(\.[a-z0-9-]+)+(/|$)", lower):
+            return True
     try:
         parsed = urlparse(text)
     except ValueError:

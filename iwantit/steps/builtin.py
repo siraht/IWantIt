@@ -545,21 +545,31 @@ def redacted_enrich(
         if payload is None:
             url = f"{base_url}/ajax.php"
             params = {"action": "torrentgroup", "id": group_id}
-            response = request_with_retry(
-                "GET",
-                url,
-                headers={"Authorization": api_key},
-                params=params,
-                timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
-                retries=int(step_cfg.get("retries") or 0),
-                backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-                max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-                retry_statuses=step_cfg.get("retry_statuses"),
-            )
-            response.raise_for_status()
-            payload = response.json()
-            if cache_enabled:
-                write_cache(cache_cfg.get("namespace", "redacted"), cache_key(cache_key_payload), payload)
+            try:
+                response = request_with_retry(
+                    "GET",
+                    url,
+                    headers={"Authorization": api_key},
+                    params=params,
+                    timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
+                    retries=int(step_cfg.get("retries") or 0),
+                    backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
+                    max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
+                    retry_statuses=step_cfg.get("retry_statuses"),
+                )
+                response.raise_for_status()
+                payload = response.json()
+                if cache_enabled:
+                    write_cache(cache_cfg.get("namespace", "redacted"), cache_key(cache_key_payload), payload)
+            except (requests.RequestException, json.JSONDecodeError) as exc:
+                data.setdefault("warnings", []).append(
+                    {
+                        "step": "redacted_enrich",
+                        "type": exc.__class__.__name__,
+                        "message": str(exc),
+                    }
+                )
+                continue
         group_map[group_id] = payload
 
     for candidate in candidates:
@@ -645,19 +655,29 @@ def redacted_comments(
         for page in pages:
             url = f"{base_url}/ajax.php"
             params = {"action": "torrentgroup", "id": group_id, "page": page}
-            response = request_with_retry(
-                "GET",
-                url,
-                headers={"Authorization": api_key},
-                params=params,
-                timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
-                retries=int(step_cfg.get("retries") or 0),
-                backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-                max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-                retry_statuses=step_cfg.get("retry_statuses"),
-            )
-            response.raise_for_status()
-            payload = response.json()
+            try:
+                response = request_with_retry(
+                    "GET",
+                    url,
+                    headers={"Authorization": api_key},
+                    params=params,
+                    timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
+                    retries=int(step_cfg.get("retries") or 0),
+                    backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
+                    max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
+                    retry_statuses=step_cfg.get("retry_statuses"),
+                )
+                response.raise_for_status()
+                payload = response.json()
+            except (requests.RequestException, json.JSONDecodeError) as exc:
+                data.setdefault("warnings", []).append(
+                    {
+                        "step": "redacted_comments",
+                        "type": exc.__class__.__name__,
+                        "message": str(exc),
+                    }
+                )
+                break
             resp = payload.get("response") or {}
             comments = resp.get("comments") or []
             for entry in comments:
@@ -682,19 +702,29 @@ def redacted_comments(
                     continue
             url = f"{base_url}/torrents.php"
             cookies = {"session": session_cookie}
-            first = request_with_retry(
-                "GET",
-                url,
-                params={"id": group_id},
-                cookies=cookies,
-                timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
-                retries=int(step_cfg.get("retries") or 0),
-                backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-                max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-                retry_statuses=step_cfg.get("retry_statuses"),
-            )
-            first.raise_for_status()
-            html = first.text
+            try:
+                first = request_with_retry(
+                    "GET",
+                    url,
+                    params={"id": group_id},
+                    cookies=cookies,
+                    timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
+                    retries=int(step_cfg.get("retries") or 0),
+                    backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
+                    max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
+                    retry_statuses=step_cfg.get("retry_statuses"),
+                )
+                first.raise_for_status()
+                html = first.text
+            except requests.RequestException as exc:
+                data.setdefault("warnings", []).append(
+                    {
+                        "step": "redacted_comments",
+                        "type": exc.__class__.__name__,
+                        "message": str(exc),
+                    }
+                )
+                continue
             total_pages = _comment_pages_from_html(html, group_id)
             if step_cfg.get("max_pages") in ("all", 0) or max_pages == 0:
                 pages = range(1, total_pages + 1)
@@ -706,18 +736,28 @@ def redacted_comments(
                 for page in pages:
                     if page == 1:
                         continue
-                    resp = request_with_retry(
-                        "GET",
-                        url,
-                        params={"id": group_id, "page": page},
-                        cookies=cookies,
-                        timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
-                        retries=int(step_cfg.get("retries") or 0),
-                        backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-                        max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-                        retry_statuses=step_cfg.get("retry_statuses"),
-                    )
-                    resp.raise_for_status()
+                    try:
+                        resp = request_with_retry(
+                            "GET",
+                            url,
+                            params={"id": group_id, "page": page},
+                            cookies=cookies,
+                            timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
+                            retries=int(step_cfg.get("retries") or 0),
+                            backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
+                            max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
+                            retry_statuses=step_cfg.get("retry_statuses"),
+                        )
+                        resp.raise_for_status()
+                    except requests.RequestException as exc:
+                        data.setdefault("warnings", []).append(
+                            {
+                                "step": "redacted_comments",
+                                "type": exc.__class__.__name__,
+                                "message": str(exc),
+                            }
+                        )
+                        break
                     group_comments.extend(_extract_comment_texts(resp.text))
             if group_comments:
                 comments_map[group_id] = group_comments
@@ -1072,6 +1112,9 @@ def _select_media_mapping(mapping: Any, media_type: str | None) -> Any:
 
 
 def _strip_suffix(title: str) -> str:
+    def _looks_like_domain(text: str) -> bool:
+        return bool(re.search(r"\b[a-z0-9-]+\.(com|net|org|io|co|fm|tv|us|uk|de|fr|es|it|ru|jp|cn|music|app)\b", text))
+
     suffixes = (
         "wikipedia",
         "discogs",
@@ -1098,7 +1141,7 @@ def _strip_suffix(title: str) -> str:
         if sep in cleaned:
             parts = cleaned.split(sep)
             tail = parts[-1].strip().lower()
-            if "." in tail or any(token in tail for token in suffixes):
+            if _looks_like_domain(tail) or any(token in tail for token in suffixes):
                 cleaned = sep.join(parts[:-1]).strip()
     return cleaned
 
@@ -1598,7 +1641,7 @@ def determine_media_type(
 
     fallback_enabled = step_cfg.get("fallback")
     if fallback_enabled is None:
-        fallback_enabled = True
+        fallback_enabled = False
     if fallback_enabled:
         query = request.get("query") or request.get("input") or ""
         inferred = _infer_media_type_from_query(query)
@@ -1772,6 +1815,14 @@ def filter_candidates(
         allowed_prefixes = _select_media_mapping(allowed_prefixes, media_type)
     if allowed_prefixes is None and media_type == "music":
         allowed_prefixes = [30]
+    if isinstance(allowed_prefixes, list):
+        normalized_prefixes: list[int] = []
+        for item in allowed_prefixes:
+            try:
+                normalized_prefixes.append(int(item))
+            except (TypeError, ValueError):
+                continue
+        allowed_prefixes = normalized_prefixes
 
     filtered: list[dict[str, Any]] = []
     removed = 0
@@ -1816,7 +1867,14 @@ def fetch_url(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) 
     if not url or request.get("input_type") != "url":
         return data
     if not url.startswith(("http://", "https://")):
-        return data
+        if looks_like_url(url):
+            url = f"https://{url.lstrip('/')}"
+            request["url"] = url
+            if request.get("input") and request.get("input_type") == "url":
+                request["input"] = url
+            data["request"] = request
+        else:
+            return data
 
     headers = step_cfg.get(
         "headers",
@@ -1932,8 +1990,18 @@ def resolve_track_release(
     if any(token in query_lower for token in ("album", "ep", "lp", "mixtape", "compilation")):
         return data
 
-    provider = (context.config.get("web_search", {}) or {}).get("provider")
-    results = (data.get("search", {}) or {}).get(provider, {}).get("results") or []
+    web_cfg = context.config.get("web_search", {}) or {}
+    provider = web_cfg.get("provider")
+    providers = web_cfg.get("providers") or {}
+    search = data.get("search", {}) or {}
+    results = []
+    if provider:
+        results = (search.get(provider) or {}).get("results") or []
+    if not results and isinstance(providers, dict):
+        for name in providers.keys():
+            results = (search.get(name) or {}).get("results") or []
+            if results:
+                break
     track_score, album_score = _track_album_scores(query)
     input_url = request.get("input") if request.get("input_type") == "url" else ""
     if isinstance(input_url, str) and "youtube.com" in input_url:
@@ -2394,6 +2462,28 @@ def prowlarr_grab(
         }
         data["work"] = work
         return data
+    if not context.confirm:
+        data.setdefault("dispatch", {})["prowlarr"] = {
+            "status": "skipped",
+            "reason": "needs_confirm",
+            "request": {
+                "method": method,
+                "url": _redact_apikey(url),
+                "headers": _redact_headers(headers),
+                "params": params,
+                "json": json_body,
+                "form": form,
+            },
+        }
+        data.setdefault("warnings", []).append(
+            {
+                "type": "needs_confirm",
+                "step": "prowlarr_grab",
+                "message": "Dispatch skipped; rerun with --confirm to allow downloads.",
+            }
+        )
+        data["work"] = work
+        return data
 
     response = request_with_retry(
         method,
@@ -2427,12 +2517,79 @@ def decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> 
     request = data.get("request", {}) or {}
     work = data.get("work", {})
     preselected = work.get("selected")
+
+    def _compute_confidence(
+        items: list[Any], selected_item: Any, index: int | None
+    ) -> float | None:
+        if not items or selected_item is None:
+            return None
+        if index is None and selected_item in items:
+            index = items.index(selected_item)
+        if index is None:
+            return None
+        if len(items) == 1:
+            return 1.0
+        scores: list[float | None] = []
+        for candidate in items:
+            score_val = None
+            if isinstance(candidate, dict):
+                rank = candidate.get("rank")
+                if isinstance(rank, dict):
+                    score_val = rank.get("score")
+            try:
+                scores.append(float(score_val) if score_val is not None else None)
+            except (TypeError, ValueError):
+                scores.append(None)
+        selected_score = scores[index]
+        other_scores = [score for idx, score in enumerate(scores) if idx != index and score is not None]
+        if selected_score is None or not other_scores:
+            return None
+        second_score = max(other_scores)
+        denom = max(abs(selected_score), 1.0)
+        confidence = (selected_score - second_score) / denom
+        if confidence < 0:
+            confidence = 0.0
+        elif confidence > 1:
+            confidence = 1.0
+        return confidence
+
+    def _apply_confidence(
+        decision: dict[str, Any], selected_item: Any, index: int | None, *, enforce: bool = True
+    ) -> dict[str, Any]:
+        min_confidence = step_cfg.get("min_confidence")
+        if min_confidence is None:
+            min_confidence = 0.6
+        try:
+            min_confidence_val = float(min_confidence)
+        except (TypeError, ValueError):
+            return decision
+        confidence = _compute_confidence(candidates, selected_item, index)
+        if confidence is None:
+            confidence = 0.0
+        decision["confidence"] = confidence
+        decision["min_confidence"] = min_confidence_val
+        if enforce and confidence < min_confidence_val:
+            work.pop("selected", None)
+            return {
+                "status": "needs_choice",
+                "reason": "low_confidence",
+                "options": candidates,
+                "confidence": confidence,
+                "min_confidence": min_confidence_val,
+            }
+        return decision
+
     if preselected is not None:
         index = None
         candidates = work.get("candidates", []) or []
         if candidates and preselected in candidates:
             index = candidates.index(preselected)
-        data["decision"] = {"status": "selected", "selected": preselected, "index": index}
+        data["decision"] = _apply_confidence(
+            {"status": "selected", "selected": preselected, "index": index},
+            preselected,
+            index,
+            enforce=False,
+        )
         data["work"] = work
         return data
     candidates = work.get("candidates", []) or []
@@ -2453,7 +2610,7 @@ def decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> 
             }
             work["selected"] = selected
             data["work"] = work
-            data["decision"] = decision
+            data["decision"] = _apply_confidence(decision, selected, idx, enforce=False)
             return data
 
     if request.get("explicit_version") and step_cfg.get("auto_select_explicit", True) and candidates:
@@ -2466,7 +2623,7 @@ def decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> 
         }
         work["selected"] = selected
         data["work"] = work
-        data["decision"] = decision
+        data["decision"] = _apply_confidence(decision, selected, 0)
         return data
 
     media_type = work.get("media_type") or data.get("request", {}).get("media_type")
@@ -2521,7 +2678,7 @@ def decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> 
                 }
                 work["selected"] = selected
                 data["work"] = work
-                data["decision"] = decision
+                data["decision"] = _apply_confidence(decision, selected, idx)
                 return data
 
     if len(candidates) == 1:
@@ -2535,6 +2692,10 @@ def decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> 
             "options": candidates,
         }
     data["work"] = work
+    if decision.get("status") == "selected":
+        selected = decision.get("selected")
+        idx = decision.get("index")
+        decision = _apply_confidence(decision, selected, idx)
     data["decision"] = decision
     return data
 
@@ -2724,6 +2885,28 @@ def dispatch_http(data: dict[str, Any], step_cfg: dict[str, Any], context: Conte
             },
         }
         return data
+    if not context.confirm:
+        data.setdefault("dispatch", {})[step_key] = {
+            "status": "skipped",
+            "reason": "needs_confirm",
+            "request": {
+                "method": method,
+                "url": _redact_apikey(url),
+                "headers": _redact_headers(headers),
+                "params": params,
+                "json": json_body,
+                "form": form,
+                "file": file_path,
+            },
+        }
+        data.setdefault("warnings", []).append(
+            {
+                "type": "needs_confirm",
+                "step": step_key,
+                "message": "Dispatch skipped; rerun with --confirm to allow HTTP dispatch.",
+            }
+        )
+        return data
     if file_path:
         path = Path(file_path)
         if not path.exists():
@@ -2832,6 +3015,25 @@ def dispatch_arr(data: dict[str, Any], step_cfg: dict[str, Any], context: Contex
                 "json": payload,
             },
         }
+        return data
+    if not context.confirm:
+        data.setdefault("dispatch", {})[arr_name] = {
+            "status": "skipped",
+            "reason": "needs_confirm",
+            "request": {
+                "method": "POST",
+                "url": url,
+                "headers": _redact_headers(headers),
+                "json": payload,
+            },
+        }
+        data.setdefault("warnings", []).append(
+            {
+                "type": "needs_confirm",
+                "step": arr_name,
+                "message": f"Dispatch skipped; rerun with --confirm to allow {arr_name} dispatch.",
+            }
+        )
         return data
     response = request_with_retry(
         "POST",

@@ -23,6 +23,7 @@ class Context:
     state_path: str
     choice_index: int | None = None
     dry_run: bool = False
+    confirm: bool = False
 
 
 BuiltinStep = Callable[[dict[str, Any], dict[str, Any], Context], dict[str, Any]]
@@ -184,10 +185,17 @@ def run_workflow(
     start_step: str | None = None,
     end_step: str | None = None,
     dry_run: bool = False,
+    confirm: bool = False,
     progress: Callable[[str, str, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     ensure_dir(state_dir())
-    context = Context(config=config, state_path=str(state_dir()), choice_index=choice_index, dry_run=dry_run)
+    context = Context(
+        config=config,
+        state_path=str(state_dir()),
+        choice_index=choice_index,
+        dry_run=dry_run,
+        confirm=confirm,
+    )
     started = start_step is None
     saw_start = False
 

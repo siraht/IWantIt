@@ -110,13 +110,14 @@ def default_config() -> dict[str, Any]:
                 "provider": "kagi",
                 "result_limit": 10,
                 "min_score": 2,
-                "fallback": True,
+                "fallback": False,
             },
             "identify_music": {"command": ["python3", "-m", "iwantit.steps.music_tracker_identify"]},
             "decide": {
                 "builtin": "decide",
                 "auto_select_formats": True,
                 "auto_select_explicit": True,
+                "min_confidence": 0.6,
             },
             "prowlarr_search": {
                 "builtin": "prowlarr_search",
@@ -304,6 +305,9 @@ def default_config() -> dict[str, Any]:
         },
         "book": {
             "default_format": "both",
+        },
+        "diagnostics": {
+            "failed_queries": {"enabled": True},
         },
         "quality_rules": {
             "music": {

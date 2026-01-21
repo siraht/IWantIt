@@ -181,7 +181,9 @@ def _sanitize_input(value: Any) -> dict[str, Any]:
     return info
 
 
-def _log_failed_query(result: dict[str, Any]) -> None:
+def _log_failed_query(result: dict[str, Any], *, enabled: bool = True) -> None:
+    if not enabled:
+        return
     should_log, reasons = _should_log_failure(result)
     if not should_log:
         return
@@ -457,6 +459,8 @@ def cmd_run(args: argparse.Namespace) -> int:
                 if status in {"ok", "dry_run"}:
                     suffix = " (dry run)" if status == "dry_run" else ""
                     sys.stderr.write(f"Release sent to {target}{suffix}\n")
+                if status == "skipped" and entry.get("reason") == "needs_confirm":
+                    sys.stderr.write(f"Release not sent to {target} (add --confirm)\n")
 
         progress = _progress
     result = run_workflow(
@@ -468,13 +472,19 @@ def cmd_run(args: argparse.Namespace) -> int:
         start_step=args.from_step,
         end_step=args.until_step,
         dry_run=args.dry_run,
+        confirm=getattr(args, "confirm", False),
         progress=progress,
     )
     if isinstance(result, dict):
         result.pop("_meta", None)
         result.pop("_config_path", None)
     result = _finalize_output(result)
-    _log_failed_query(result)
+    diag_cfg = config.get("diagnostics", {}) or {}
+    failed_cfg = diag_cfg.get("failed_queries", {}) if isinstance(diag_cfg, dict) else {}
+    enabled = True
+    if isinstance(failed_cfg, dict) and "enabled" in failed_cfg:
+        enabled = bool(failed_cfg.get("enabled"))
+    _log_failed_query(result, enabled=enabled)
     _print_result_summary(result, args)
     if not args.full:
         result = _compact_output(result)
@@ -494,7 +504,13 @@ def cmd_step(args: argparse.Namespace) -> int:
         return 1
     config = load_config(ensure_config_exists(args.config))
     ensure_dir(state_dir())
-    context = Context(config=config, state_path=str(state_dir()), choice_index=args.choice, dry_run=args.dry_run)
+    context = Context(
+        config=config,
+        state_path=str(state_dir()),
+        choice_index=args.choice,
+        dry_run=args.dry_run,
+        confirm=getattr(args, "confirm", False),
+    )
     step_cfg = config.get("steps", {}).get(args.name, {"builtin": args.name})
     step_cfg = dict(step_cfg)
     step_cfg.setdefault("_step", args.name)
@@ -650,12 +666,136 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 1 if errors else 0
 
 
+def cmd_help(args: argparse.Namespace) -> int:
+    topic = (args.topic or "overview").lower()
+    config_template = (
+        "Minimal config template:\n"
+        "  web_search:\n"
+        "    provider: kagi\n"
+        "    providers:\n"
+        "      kagi:\n"
+        "        api_key: ${ENV:KAGI_SEARCH_API_KEY}\n"
+        "  prowlarr:\n"
+        "    url: http://localhost:9696\n"
+        "    api_key: CHANGE_ME\n"
+        "  arr:\n"
+        "    radarr:\n"
+        "      url: http://localhost:7878\n"
+        "      api_key: CHANGE_ME\n"
+        "      root_folder: /media/movies\n"
+        "      quality_profile_id: 1\n"
+        "      endpoint: /api/v3/movie\n"
+        "    sonarr:\n"
+        "      url: http://localhost:8989\n"
+        "      api_key: CHANGE_ME\n"
+        "      root_folder: /media/tv\n"
+        "      quality_profile_id: 1\n"
+        "      endpoint: /api/v3/series\n"
+        "  redacted:\n"
+        "    url: https://redacted.sh\n"
+        "    api_key: CHANGE_ME\n"
+    )
+    docs = {
+        "overview": (
+            "IWantIt quick help\n"
+            "\n"
+            "Install + init:\n"
+            "  uv tool install .\n"
+            "  iwantit init\n"
+            "\n"
+            "Run:\n"
+            "  iwantit run --text \"Artist - Album\"\n"
+            "  iwantit run --url \"https://...\"\n"
+            "  iwantit run --text \"...\" --confirm   # allow dispatch/grab\n"
+            "\n"
+            "When you see decision.status=needs_choice:\n"
+            "  iwantit run ... | iwantit choose --stdin --interactive\n"
+            "  iwantit run ... --choice N [--confirm]\n"
+            "\n"
+            "More:\n"
+            "  iwantit help config     # required config and env vars\n"
+            "  iwantit help json       # input/output JSON contract\n"
+            "  iwantit help safety     # dry-run vs confirm\n"
+            "  iwantit help exit-codes # automation semantics\n"
+        ),
+        "config": (
+            "Config locations:\n"
+            "  ~/.config/iwantit/config.yaml (override with IWANTIT_CONFIG)\n"
+            "  ~/.config/iwantit/secrets.yaml (override with IWANTIT_SECRETS)\n"
+            "\n"
+            "Minimum config for common integrations:\n"
+            "  Prowlarr: prowlarr.url, prowlarr.api_key\n"
+            "  Web search: web_search.provider + provider api_key\n"
+            "  Radarr: arr.radarr.url, arr.radarr.api_key (optional)\n"
+            "  Sonarr: arr.sonarr.url, arr.sonarr.api_key (optional)\n"
+            "  Redacted: redacted.url, redacted.api_key (optional)\n"
+            "\n"
+            "Use --verbose for a minimal config template.\n"
+        ),
+        "json": (
+            "Input JSON (stdin or file):\n"
+            "  { \"request\": { \"input\": \"...\", \"input_type\": \"text|url|image\", \"query\": \"...\" } }\n"
+            "\n"
+            "Output JSON (always):\n"
+            "  request, work, decision, search, dispatch, tags, error\n"
+            "\n"
+            "Notes:\n"
+            "  - URL-like input is auto-detected and treated as input_type=url.\n"
+            "  - Output arrays are compact by default; use --full for full items.\n"
+        ),
+        "safety": (
+            "Safety model:\n"
+            "  --dry-run: executes read-only steps but skips network side effects.\n"
+            "  --confirm: allows dispatch/grab steps to run.\n"
+            "\n"
+            "Side-effect steps include:\n"
+            "  prowlarr_grab, dispatch_radarr, dispatch_sonarr, http_dispatch\n"
+        ),
+        "exit-codes": (
+            "Exit codes:\n"
+            "  0  success / selected\n"
+            "  1  error\n"
+            "  20 decision.status=needs_choice\n"
+        ),
+    }
+    if topic not in docs:
+        sys.stderr.write(f"unknown help topic: {topic}\n")
+        sys.stderr.write("available: overview, config, json, safety, exit-codes\n")
+        return 1
+    output = docs[topic]
+    if topic == "config" and getattr(args, "verbose", False):
+        output = output + "\n" + config_template
+    sys.stdout.write(output)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="iwantit", description="Extensible media workflow runner")
+    epilog = (
+        "Examples:\n"
+        "  iwantit init\n"
+        "  iwantit run --text \"Pink Floyd - Dark Side of the Moon\"\n"
+        "  iwantit run --url \"https://open.spotify.com/album/...\"\n"
+        "  iwantit run --text \"...\" --confirm   (allow dispatch/grab)\n"
+        "  iwantit run ... | iwantit choose --stdin --interactive\n"
+        "\n"
+        "Notes:\n"
+        "  - URL-like input is auto-detected (stdin/JSON too).\n"
+        "  - Output JSON is compact by default; use --full for full arrays.\n"
+        "  - Exit code 20 means decision.status=needs_choice.\n"
+        "\n"
+        "More help:\n"
+        "  iwantit help [overview|config|json|safety|exit-codes]\n"
+    )
+    parser = argparse.ArgumentParser(
+        prog="iwantit",
+        description="Extensible media workflow runner",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=epilog,
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--config", help="Path to config file")
+    common.add_argument("--config", help="Path to config file (or set IWANTIT_CONFIG)")
     common.add_argument("--quiet", action="store_true", help="Suppress progress output")
     common.add_argument(
         "--full",
@@ -670,7 +810,7 @@ def build_parser() -> argparse.ArgumentParser:
     source.add_argument("--image", help="Image path input")
     source.add_argument("--json", help="JSON file input")
     source.add_argument("--stdin", action="store_true", help="Read JSON or text from stdin")
-    input_group.add_argument("--media-type", help="media type (music, movie, tv, book)")
+    input_group.add_argument("--media-type", help="Media type override (music, movie, tv, book)")
     input_group.add_argument("--tag", action="append", help="Tag to attach", default=[])
     input_group.add_argument("--pref", action="append", help="Preference key=value", default=[])
     input_group.add_argument(
@@ -680,6 +820,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     input_group.add_argument("--choice", type=int, help="Choice index for selection")
     input_group.add_argument("--dry-run", action="store_true", help="Do not perform network side effects")
+    input_group.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Allow side-effecting dispatch steps (downloads, arr dispatch)",
+    )
     input_group.add_argument("--from", dest="from_step", help="Start from this step name")
     input_group.add_argument("--until", dest="until_step", help="Stop after this step name")
 
@@ -687,7 +832,19 @@ def build_parser() -> argparse.ArgumentParser:
     init_cmd.add_argument("--force", action="store_true", help="Overwrite config if it exists")
     init_cmd.set_defaults(func=cmd_init)
 
-    run_cmd = sub.add_parser("run", parents=[common, input_group], help="Run a workflow")
+    run_cmd = sub.add_parser(
+        "run",
+        parents=[common, input_group],
+        help="Run a workflow",
+        description=(
+            "Run the workflow for the detected or provided media type.\n"
+            "\n"
+            "Safety:\n"
+            "  --dry-run  executes read-only steps only\n"
+            "  --confirm  allows side-effect steps (grabs/dispatch)\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     run_cmd.add_argument("--workflow", help="Workflow name to run")
     run_cmd.set_defaults(func=cmd_run)
 
@@ -717,6 +874,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate_cmd = sub.add_parser("validate", parents=[common], help="Validate config")
     validate_cmd.set_defaults(func=cmd_validate)
+
+    help_cmd = sub.add_parser("help", help="Show extended help topics")
+    help_cmd.add_argument("topic", nargs="?", help="overview|config|json|safety|exit-codes")
+    help_cmd.add_argument("--verbose", action="store_true", help="Include minimal config template")
+    help_cmd.set_defaults(func=cmd_help)
 
     return parser
 
