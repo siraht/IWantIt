@@ -7,6 +7,19 @@ name = "iwantit"
 version = "0.1.0"
 description = "Extensible media request workflow runner"
 readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "IWantIt contributors" }]
+keywords = ["media", "automation", "workflow", "prowlarr", "radarr", "sonarr"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Utilities",
+]
+urls = { "Homepage" = "https://github.com/siraht/IWantIt", "Repository" = "https://github.com/siraht/IWantIt" }
 requires-python = ">=3.11"
 dependencies = [
   "PyYAML>=6.0",
