@@ -5,3 +5,7 @@ iwantit.egg-info/
 __pycache__/
 *.pyc
 .beads/
+dist/
+.pytest_cache/
+.coverage
+.venv/
