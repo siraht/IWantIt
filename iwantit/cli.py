@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,7 @@ from .util import (
 )
 
 EXIT_NEEDS_CHOICE = 20
+_FAILED_QUERIES_REL = Path("diagnostics") / "failed_queries.jsonl"
 _COMPACT_LIST_KEYS = {"results", "candidates", "options"}
 _COMPACT_ITEM_KEYS = [
     "title",
@@ -116,6 +118,66 @@ def _finalize_output(data: Any) -> dict[str, Any]:
     if data.get("error") and data["decision"].get("status") != "error":
         data["decision"]["status"] = "error"
     return data
+
+
+def _should_log_failure(result: dict[str, Any]) -> tuple[bool, list[str]]:
+    reasons: list[str] = []
+    decision_status = (result.get("decision") or {}).get("status")
+    if decision_status == "error":
+        reasons.append("error")
+    work = result.get("work") or {}
+    request = result.get("request") or {}
+    media_type = work.get("media_type") or request.get("media_type")
+    if media_type == "music":
+        if not work.get("artist"):
+            reasons.append("missing_artist")
+        if not work.get("title"):
+            reasons.append("missing_title")
+    else:
+        if not work.get("title"):
+            reasons.append("missing_title")
+    candidates = work.get("candidates") or []
+    if decision_status == "needs_choice" and not candidates:
+        reasons.append("no_candidates")
+    query = request.get("query")
+    query_original = request.get("query_original")
+    if isinstance(query, str) and isinstance(query_original, str):
+        if query.strip() == query_original.strip():
+            reasons.append("query_unrefined")
+    return (len(reasons) > 0), reasons
+
+
+def _log_failed_query(result: dict[str, Any]) -> None:
+    should_log, reasons = _should_log_failure(result)
+    if not should_log:
+        return
+    work = result.get("work") or {}
+    request = result.get("request") or {}
+    search = result.get("search") or {}
+    entry = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "reasons": reasons,
+        "input": request.get("input"),
+        "input_type": request.get("input_type"),
+        "query": request.get("query"),
+        "query_original": request.get("query_original"),
+        "media_type": work.get("media_type") or request.get("media_type"),
+        "work": {
+            "artist": work.get("artist"),
+            "title": work.get("title"),
+            "year": work.get("year"),
+        },
+        "decision": result.get("decision"),
+        "url": result.get("url"),
+        "search_counts": {
+            key: (val.get("count") if isinstance(val, dict) else None)
+            for key, val in search.items()
+        },
+    }
+    base = ensure_dir(state_dir())
+    path = ensure_dir(base / _FAILED_QUERIES_REL.parent) / _FAILED_QUERIES_REL.name
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, ensure_ascii=True) + "\n")
 
 
 def _slim_categories(value: Any) -> Any:
@@ -310,6 +372,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         result.pop("_meta", None)
         result.pop("_config_path", None)
     result = _finalize_output(result)
+    _log_failed_query(result)
     if not args.full:
         result = _compact_output(result)
     write_json(result)
