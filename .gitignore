@@ -4,3 +4,4 @@ build/
 iwantit.egg-info/
 __pycache__/
 *.pyc
+.beads/
