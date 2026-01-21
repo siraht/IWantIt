@@ -10,6 +10,77 @@ This repo currently focuses on:
 - Books via Prowlarr
 - Strong defaults for query cleanup, media type detection, and scoring
 
+## Quick start and integrations
+Get productive first; customize later.
+
+1) Install and initialize:
+```bash
+uv tool install .
+iwantit init
+```
+
+2) Run a safe test:
+```bash
+iwantit run --text "Pink Floyd - Dark Side of the Moon"
+```
+
+3) Allow side effects when you're ready:
+```bash
+iwantit run --text "Bernard Badie - Bones [2011]" --confirm
+```
+
+Integration points (all configurable in `~/.config/iwantit/config.yaml`):
+- Prowlarr search + grab (music/books)
+- Radarr and Sonarr dispatch (movie/tv)
+- Web search providers (Kagi/Brave) for release verification
+- Optional tracker enrichment (Redacted)
+- Custom HTTP or external command steps
+
+### Help and automation essentials
+```bash
+iwantit --help
+iwantit help overview
+iwantit help config
+iwantit help config --verbose
+iwantit help json
+iwantit help safety
+iwantit help exit-codes
+```
+
+Key automation notes:
+- URL-like input is auto-detected even from stdin/JSON.
+- Output arrays are compact by default; use `--full` for full items.
+- Exit code `20` means `decision.status=needs_choice`.
+- `--dry-run` skips side effects; `--confirm` allows them.
+
+### Minimal config template
+```yaml
+web_search:
+  provider: kagi
+  providers:
+    kagi:
+      api_key: ${ENV:KAGI_SEARCH_API_KEY}
+prowlarr:
+  url: http://localhost:9696
+  api_key: CHANGE_ME
+arr:
+  radarr:
+    url: http://localhost:7878
+    api_key: CHANGE_ME
+    root_folder: /media/movies
+    quality_profile_id: 1
+    endpoint: /api/v3/movie
+  sonarr:
+    url: http://localhost:8989
+    api_key: CHANGE_ME
+    root_folder: /media/tv
+    quality_profile_id: 1
+    endpoint: /api/v3/series
+redacted:
+  url: https://redacted.sh
+  api_key: CHANGE_ME
+```
+
 ## How it works (mental model)
 The pipeline runs in two phases:
 
@@ -124,8 +195,8 @@ iwantit init
 # dry run (no side effects)
 iwantit run --text "Pink Floyd - Dark Side of the Moon"
 
-# real run (grabs)
-iwantit run --text "Bernard Badie - Bones [2011]"
+# real run (dispatch/grabs)
+iwantit run --text "Bernard Badie - Bones [2011]" --confirm
 
 # URL input
 iwantit run --url "https://www.youtube.com/watch?v=naD6-V5CLk0" --dry-run
@@ -134,7 +205,7 @@ iwantit run --url "https://www.youtube.com/watch?v=naD6-V5CLk0" --dry-run
 ## CLI commands
 ```bash
 iwantit init [--force]
-iwantit run [--text|--url|--image|--json|--stdin] [--workflow name] [--dry-run] [--book-format ebook|audiobook|both]
+iwantit run [--text|--url|--image|--json|--stdin] [--workflow name] [--dry-run] [--confirm] [--book-format ebook|audiobook|both]
 iwantit step <step-name> [--text|--url|--image|--json|--stdin] [--book-format ebook|audiobook|both]
 iwantit choose [--json|--stdin] [--interactive] [--select <idx|substring>]
 iwantit list workflows|steps
@@ -147,6 +218,7 @@ Notes:
 - URLs are auto-detected (CLI args, stdin, or JSON input) and treated as `--url`.
 - CLI output is compacted by default; use `--full` to emit full JSON.
 - Progress messages are written to stderr; use `--quiet` to suppress.
+- Dispatch steps are skipped unless you pass `--confirm`.
 
 ## Output shape
 Every run returns a JSON object:
