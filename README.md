@@ -69,6 +69,16 @@ Validate configuration and connectivity:
 iwantit doctor
 ```
 
+### Functional smoke tests
+Run an offline end-to-end test harness with stubbed services:
+```bash
+python3 scripts/functional_test.py
+```
+
+Options:
+- `--verbose` prints progress
+- `--keep-temp` keeps the generated config directory
+
 ### Logs and reports
 Optional structured logs and human-readable reports:
 ```yaml
