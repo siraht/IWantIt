@@ -45,6 +45,8 @@ iwantit help config --verbose
 iwantit help json
 iwantit help safety
 iwantit help exit-codes
+iwantit help errors
+iwantit doctor
 ```
 
 Key automation notes:
@@ -52,6 +54,51 @@ Key automation notes:
 - Output arrays are compact by default; use `--full` for full items.
 - Exit code `20` means `decision.status=needs_choice`.
 - `--dry-run` skips side effects; `--confirm` allows them.
+- `iwantit run --batch file.jsonl --jobs 4` runs batches in parallel.
+- `run_id` and `logs` are included in output JSON for tracing.
+
+### Batch processing
+Batch inputs can be a JSON array, JSONL, or plain lines:
+```bash
+iwantit run --batch inputs.jsonl --jobs 4
+```
+
+### Doctor / setup checks
+Validate configuration and connectivity:
+```bash
+iwantit doctor
+```
+
+### Logs and reports
+Optional structured logs and human-readable reports:
+```yaml
+logging:
+  path: ~/.local/state/iwantit/run.log.jsonl
+report:
+  enabled: true
+```
+
+Common error codes are documented via:
+```bash
+iwantit help errors
+```
+
+### Plugins
+External steps can be discovered via `plugins/` or `IWANTIT_PLUGIN_PATH`:
+```yaml
+plugins:
+  paths:
+    - /path/to/iwantit-plugins
+```
+
+Plugin format (`plugin.yaml`):
+```yaml
+name: my-plugin
+version: 0.1.0
+steps:
+  my_step:
+    command: ["python3", "-m", "my_plugin.steps.do_thing"]
+```
 
 ### Minimal config template
 ```yaml
