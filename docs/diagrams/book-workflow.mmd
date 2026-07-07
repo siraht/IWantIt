@@ -2,7 +2,7 @@ flowchart TD
     A[Workflow: book] --> B[prowlarr_search]
     B --> C["filter_candidates<br/>(category prefixes)"]
     C --> D[filter_match]
-    D --> E["book_decide<br/>(placeholder)"]
+    D --> E["book_decide<br/>(ebook/audiobook)"]
     E --> F[rank_releases]
     F --> G[decide]
     G --> H{decision}
@@ -12,5 +12,5 @@ flowchart TD
     K --> I
 
     subgraph notes
-        N1["Book format logic<br/>(ebook/audiobook)<br/>not implemented yet"]
+        N1["Book format logic<br/>filters ebook/audiobook<br/>before ranking"]
     end

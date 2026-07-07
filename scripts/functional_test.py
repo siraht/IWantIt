@@ -75,6 +75,13 @@ PROWLARR_FIXTURE = [
     },
 ]
 
+PROWLARR_DOWNLOAD_CLIENTS = [
+    {"id": 10, "name": "Music"},
+    {"id": 20, "name": "Gen/Books"},
+    {"id": 30, "name": "Movies"},
+    {"id": 40, "name": "TV"},
+]
+
 HTML_PAGE = """<!doctype html>
 <html>
   <head>
@@ -96,6 +103,9 @@ class StubHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/v1/search":
             self._write_json(PROWLARR_FIXTURE)
+            return
+        if parsed.path == "/api/v1/downloadclient":
+            self._write_json(PROWLARR_DOWNLOAD_CLIENTS)
             return
         if parsed.path == "/api/v1/system/status":
             self._write_json({"version": "test"})

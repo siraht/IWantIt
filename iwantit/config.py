@@ -248,14 +248,16 @@ def default_config() -> dict[str, Any]:
             "api_key": "CHANGE_ME",
             "timeout": 30,
             "download_clients": {
-                "music": None,
-                "book": None,
+                "music": "Music",
+                "book": "Gen/Books",
+                "movie": "Movies",
+                "tv": "TV",
             },
             "download_client_rules": [
-                {"client_id": 1, "categories": [3010, 3040, 3050, 3060]},
-                {"client_id": 2, "categories": [3020], "category_prefixes": [2]},
-                {"client_id": 3, "category_prefixes": [5]},
-                {"client_id": 4, "categories": [3030], "category_prefixes": [7]},
+                {"client_name": "Music", "categories": [3010, 3040, 3050, 3060]},
+                {"client_name": "Movies", "categories": [3020], "category_prefixes": [2]},
+                {"client_name": "TV", "category_prefixes": [5]},
+                {"client_name": "Gen/Books", "categories": [3030], "category_prefixes": [7]},
             ],
             "search": {
                 "indexer_ids": {
@@ -264,7 +266,7 @@ def default_config() -> dict[str, Any]:
                 },
                 "categories": {
                     "music": [3000, 3010, 3040],
-                    "book": [7000],
+                    "book": [7000, 7020, 7040, 3030],
                 },
                 "request": {
                     "url": "{config.prowlarr.url}/api/v1/search",

@@ -1,16 +1,18 @@
-Book Decision Logic (Placeholder)
+Book Decision Logic
 
-This project currently includes a no-op `book_decide` step that is intended to
-handle future book format decisions (audiobook vs ebook vs both). The step is
-wired into the default book workflow so future logic can be dropped in without
-changing workflow wiring.
+The `book_decide` step filters book candidates by ebook/audiobook preference
+before ranking and final selection.
 
-Planned inputs:
-- request.preferences.format (ebook, audiobook, both)
-- work.candidates (Prowlarr results)
+Inputs:
+- `request.preferences.book_format`, `request.preferences.format`, or `request.preferences.formats`
+- query-derived `request.release_preferences.formats` and `request.release_preferences.media`
+- `work.candidates` from Prowlarr
 
-Planned outputs:
-- work.selected_format
-- optional candidate filtering based on format rules
+Supported values include `ebook`, `epub`, `mobi`, `azw3`, `pdf`, `audiobook`,
+`m4b`, `mp3`, `audible`, and `both`.
 
-When implemented, this step should run before `rank_releases` and `decide`.
+Outputs:
+- `work.candidates` enriched with `derived.book_formats` when detectable
+- `filter.book_format` with requested formats and matched counts
+
+The step runs before `rank_releases` and `decide`.

@@ -2170,9 +2170,87 @@ def resolve_track_release(
     return data
 
 
-def _resolve_download_client_id(
-    candidate: dict[str, Any], rules: list[dict[str, Any]] | None
+def _download_client_ref_to_id(
+    ref: Any,
+    context: Context,
+    prow_cfg: dict[str, Any],
 ) -> int | None:
+    if ref is None or ref == "":
+        return None
+    try:
+        return int(ref)
+    except (TypeError, ValueError):
+        pass
+    if not isinstance(ref, str):
+        return None
+
+    name = ref.strip()
+    if not name:
+        return None
+    base_url = prow_cfg.get("url")
+    api_key = prow_cfg.get("api_key")
+    if not base_url or not api_key or api_key == "CHANGE_ME":
+        raise RuntimeError(f"prowlarr download client requires API config to resolve name: {name}")
+
+    cache = context.config.setdefault("_runtime_cache", {})
+    clients = cache.get("prowlarr_download_clients")
+    if clients is None:
+        url = base_url.rstrip("/") + "/api/v1/downloadclient"
+        with provider_slot("prowlarr", provider_concurrency(context.config, "prowlarr")):
+            enforce_rate_limit("prowlarr", provider_rate_limit(context.config, "prowlarr"))
+            response = request_with_retry(
+                "GET",
+                url,
+                headers={"X-Api-Key": api_key},
+                timeout=prow_cfg.get("timeout", 30),
+                retries=1,
+                backoff_seconds=0.5,
+            )
+        response.raise_for_status()
+        clients = response.json()
+        if not isinstance(clients, list):
+            raise RuntimeError("prowlarr download client list returned an unexpected response")
+        cache["prowlarr_download_clients"] = clients
+
+    normalized = name.casefold()
+    for client in clients:
+        if not isinstance(client, dict):
+            continue
+        client_name = str(client.get("name") or "").strip()
+        if client_name.casefold() != normalized:
+            continue
+        try:
+            return int(client.get("id"))
+        except (TypeError, ValueError):
+            raise RuntimeError(f"prowlarr download client has no numeric id: {name}") from None
+    raise RuntimeError(f"prowlarr download client not found by name: {name}")
+
+
+def _set_download_client(
+    work: dict[str, Any],
+    ref: Any,
+    context: Context,
+    prow_cfg: dict[str, Any],
+) -> bool:
+    if ref is None or ref == "":
+        return False
+    try:
+        work["download_client_id"] = int(ref)
+        return True
+    except (TypeError, ValueError):
+        pass
+    if isinstance(ref, str):
+        work["download_client_name"] = ref
+    resolved = _download_client_ref_to_id(ref, context, prow_cfg)
+    if resolved is None:
+        return False
+    work["download_client_id"] = resolved
+    return True
+
+
+def _resolve_download_client_ref(
+    candidate: dict[str, Any], rules: list[dict[str, Any]] | None
+) -> Any:
     if not rules or not isinstance(candidate, dict):
         return None
     cat_ids = _extract_category_ids(candidate)
@@ -2181,8 +2259,12 @@ def _resolve_download_client_id(
     for rule in rules:
         if not isinstance(rule, dict):
             continue
-        client_id = rule.get("client_id") or rule.get("id")
-        if client_id is None:
+        client_ref = rule.get("client_id")
+        if client_ref is None:
+            client_ref = rule.get("id")
+        if client_ref is None:
+            client_ref = rule.get("client_name") or rule.get("name")
+        if client_ref is None:
             continue
         categories = rule.get("categories") or []
         prefixes = rule.get("category_prefixes") or []
@@ -2190,13 +2272,13 @@ def _resolve_download_client_id(
         for cat in categories:
             try:
                 if int(cat) in cat_ids:
-                    return int(client_id)
+                    return client_ref
             except (TypeError, ValueError):
                 continue
         for prefix in prefixes:
             for cat_id in cat_ids:
                 if _match_category_prefix(cat_id, prefix, prefix_mode):
-                    return int(client_id)
+                    return client_ref
     return None
 
 
@@ -2554,16 +2636,15 @@ def prowlarr_grab(
     prow_cfg = context.config.get("prowlarr", {})
     download_clients = prow_cfg.get("download_clients", {})
     if media_type and not work.get("download_client_id"):
-        work["download_client_id"] = download_clients.get(media_type)
+        _set_download_client(work, download_clients.get(media_type), context, prow_cfg)
     if not work.get("download_client_id"):
         rules_cfg = prow_cfg.get("download_client_rules")
         if isinstance(rules_cfg, dict):
             rules = _select_media_mapping(rules_cfg, media_type)
         else:
             rules = rules_cfg
-        resolved = _resolve_download_client_id(selected, rules if isinstance(rules, list) else None)
-        if resolved is not None:
-            work["download_client_id"] = resolved
+        resolved = _resolve_download_client_ref(selected, rules if isinstance(rules, list) else None)
+        _set_download_client(work, resolved, context, prow_cfg)
 
     grab_cfg = prow_cfg.get("grab", {})
     request_cfg = step_cfg.get("request") or grab_cfg.get("request", {})

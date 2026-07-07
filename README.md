@@ -40,6 +40,9 @@ Integration points (all configurable in `~/.config/iwantit/config.yaml`):
 - Optional tracker enrichment (Redacted)
 - Custom HTTP or external command steps
 
+Local service names and endpoints for this workspace are documented in
+[`docs/local_media_services.md`](docs/local_media_services.md).
+
 ### Optional dependencies
 - OCR uses `tesseract`. Install it if you want to pass screenshots via `--image`.
 
@@ -360,29 +363,35 @@ prowlarr:
       book: []
     categories:
       music: [3000, 3010, 3040]
-      book: [7000]
+      book: [7000, 7020, 7040, 3030]
 ```
 
-### Download client routing by category
-You can auto-select a download client based on Prowlarr categories:
+### Download client routing
+Prowlarr grabs can select a download client by name or numeric ID. Name-based
+routing is preferred because Prowlarr owns the final client IDs.
 
 ```yaml
 prowlarr:
+  download_clients:
+    music: Music
+    book: Gen/Books
   download_client_rules:
-    - client_id: 1
+    - client_name: Music
       categories: [3010, 3040, 3050, 3060]
-    - client_id: 2
+    - client_name: Movies
       categories: [3020]
       category_prefixes: [2]  # matches 2xxx
-    - client_id: 3
+    - client_name: TV
       category_prefixes: [5]  # matches 5xxx
-    - client_id: 4
+    - client_name: Gen/Books
       categories: [3030]
       category_prefixes: [7]  # matches 7xxx
 ```
 
 Prefix matching is thousands-based by default (`3` → `3000-3999`). You can use
-`prefix_mode: "hundreds"` in a rule if you prefer.
+`prefix_mode: "hundreds"` in a rule if you prefer. If the selected client is a
+name, IWantIt resolves it through Prowlarr's `/api/v1/downloadclient` endpoint
+before posting the grab request.
 
 ### Filtering and matching
 The pipeline applies two filters to Prowlarr results:
