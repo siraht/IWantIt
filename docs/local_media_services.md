@@ -25,11 +25,13 @@ Configured Prowlarr download client names:
 Use the IWantIt book workflow with Prowlarr:
 
 ```bash
-iwantit run --text "author title epub" --media-type book --pref book_format=ebook --dry-run
-iwantit run --text "author title audiobook" --media-type book --pref book_format=audiobook --dry-run
+iwantit run --text "author title" --media-type book --book-format both --dry-run
+iwantit run --text "author title" --media-type book --book-format both --confirm
 ```
 
-When the dry run selects the correct release, rerun with `--confirm`.
+When both formats are available, IWantIt should select the top-ranked ebook and
+the top-ranked audiobook. When only one format is available, it will select that
+format or require a choice if multiple ambiguous candidates remain.
 
 Relevant categories:
 

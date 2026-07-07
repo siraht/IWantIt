@@ -320,6 +320,7 @@ def default_config() -> dict[str, Any]:
         },
         "book": {
             "default_format": "both",
+            "auto_select_each_format": True,
         },
         "diagnostics": {
             "failed_queries": {"enabled": True},
@@ -372,7 +373,24 @@ def default_config() -> dict[str, Any]:
                 ],
             },
             "book": {
-                "title_fields": ["title", "name", "_raw.title", "_raw.name"],
+                "title_fields": [
+                    "title",
+                    "name",
+                    "_raw.title",
+                    "_raw.name",
+                    "indexer",
+                    "_raw.indexer",
+                ],
+                "source_priority": ["myanonamouse", "mam"],
+                "source_priority_weight": 120,
+                "score": [
+                    {"match": r"(?i)\b(epub|mobi|azw3|pdf|kindle)\b", "score": 25, "label": "ebook"},
+                    {"match": r"(?i)\b(audiobook|audio book|audible|m4b|aax)\b", "score": 25, "label": "audiobook"},
+                ],
+                "numeric_fields": [
+                    {"path": "seeders", "weight": 0.5, "max": 200, "label": "seeders"},
+                    {"path": "grabs", "weight": 0.1, "max": 500, "label": "grabs"},
+                ],
                 "format_rules": {
                     "audiobook": {
                         "score": [

@@ -2567,6 +2567,27 @@ def rank_releases(
             score += rec_score
             reasons.append("recommendation")
 
+        source_priority = rules.get("source_priority") or []
+        if isinstance(source_priority, list) and source_priority:
+            source_text = " ".join(
+                [
+                    str(candidate.get("indexer") or ""),
+                    str(candidate.get("provider") or ""),
+                    str(candidate.get("source") or ""),
+                    str((candidate.get("_raw") or {}).get("indexer") if isinstance(candidate.get("_raw"), dict) else ""),
+                    str((candidate.get("_raw") or {}).get("indexerId") if isinstance(candidate.get("_raw"), dict) else ""),
+                ]
+            ).lower()
+            for idx, source in enumerate(source_priority):
+                source_str = str(source).strip().lower()
+                if not source_str or source_str not in source_text:
+                    continue
+                weight = float(rules.get("source_priority_weight") or 100.0)
+                bump = weight * (len(source_priority) - idx)
+                score += bump
+                reasons.append(f"source:{source_str}")
+                break
+
         candidate["rank"] = {
             "score": score,
             "rejected": rejected_match,
@@ -2617,20 +2638,31 @@ def prowlarr_grab(
     data: dict[str, Any], step_cfg: dict[str, Any], context: Context
 ) -> dict[str, Any]:
     work = data.get("work", {})
-    selected = work.get("selected")
-    if not selected:
+    selected_items = work.get("selected_items")
+    if isinstance(selected_items, list) and selected_items:
+        selections = selected_items
+    else:
+        selected = work.get("selected")
+        selections = [selected] if selected else []
+    if not selections:
         return data
-    if not isinstance(selected, dict):
-        selected = {"title": str(selected)}
-        work["selected"] = selected
-    raw = selected.get("_raw")
-    if isinstance(raw, dict):
-        if not selected.get("guid") and raw.get("guid"):
-            selected["guid"] = raw.get("guid")
-        if not selected.get("indexer_id"):
-            idx = raw.get("indexerId") or raw.get("indexer_id")
-            if idx is not None:
-                selected["indexer_id"] = idx
+
+    normalized_selections = []
+    for selected in selections:
+        if not isinstance(selected, dict):
+            selected = {"title": str(selected)}
+        raw = selected.get("_raw")
+        if isinstance(raw, dict):
+            if not selected.get("guid") and raw.get("guid"):
+                selected["guid"] = raw.get("guid")
+            if not selected.get("indexer_id"):
+                idx = raw.get("indexerId") or raw.get("indexer_id")
+                if idx is not None:
+                    selected["indexer_id"] = idx
+        normalized_selections.append(selected)
+    work["selected"] = normalized_selections[0]
+    if len(normalized_selections) > 1:
+        work["selected_items"] = normalized_selections
 
     media_type = work.get("media_type") or data.get("request", {}).get("media_type")
     prow_cfg = context.config.get("prowlarr", {})
@@ -2643,82 +2675,130 @@ def prowlarr_grab(
             rules = _select_media_mapping(rules_cfg, media_type)
         else:
             rules = rules_cfg
-        resolved = _resolve_download_client_ref(selected, rules if isinstance(rules, list) else None)
+        resolved = _resolve_download_client_ref(normalized_selections[0], rules if isinstance(rules, list) else None)
         _set_download_client(work, resolved, context, prow_cfg)
 
     grab_cfg = prow_cfg.get("grab", {})
     request_cfg = step_cfg.get("request") or grab_cfg.get("request", {})
     if not request_cfg:
         return data
-    rendered = render_template(request_cfg, data, context.config)
-    url = rendered.get("url")
-    if not url:
-        base_url = prow_cfg.get("url")
-        path = rendered.get("path") or grab_cfg.get("path")
-        if base_url and path:
-            url = base_url.rstrip("/") + "/" + str(path).lstrip("/")
-    if not url:
-        return data
 
-    method = (rendered.get("method") or "POST").upper()
-    headers = rendered.get("headers")
-    params = rendered.get("params")
-    json_body = rendered.get("json")
-    form = rendered.get("form")
-    if isinstance(json_body, dict):
-        cleaned: dict[str, Any] = {}
-        unresolved: list[str] = []
-        for key, value in json_body.items():
-            if value is None or value == "":
-                continue
-            if isinstance(value, str) and value.strip().startswith("{") and value.strip().endswith("}"):
-                unresolved.append(key)
-                continue
-            cleaned[key] = value
-        if unresolved:
-            raise RuntimeError(f"prowlarr grab missing template values for: {', '.join(unresolved)}")
-        json_body = cleaned
+    def build_request(selected: dict[str, Any]) -> dict[str, Any] | None:
+        previous = work.get("selected")
+        work["selected"] = selected
+        try:
+            rendered = render_template(request_cfg, data, context.config)
+        finally:
+            work["selected"] = previous
+        url = rendered.get("url")
+        if not url:
+            base_url = prow_cfg.get("url")
+            path = rendered.get("path") or grab_cfg.get("path")
+            if base_url and path:
+                url = base_url.rstrip("/") + "/" + str(path).lstrip("/")
+        if not url:
+            return None
+
+        method = (rendered.get("method") or "POST").upper()
+        headers = rendered.get("headers")
+        params = rendered.get("params")
+        json_body = rendered.get("json")
+        form = rendered.get("form")
+        if isinstance(json_body, dict):
+            cleaned: dict[str, Any] = {}
+            unresolved: list[str] = []
+            for key, value in json_body.items():
+                if value is None or value == "":
+                    continue
+                if isinstance(value, str) and value.strip().startswith("{") and value.strip().endswith("}"):
+                    unresolved.append(key)
+                    continue
+                cleaned[key] = value
+            if unresolved:
+                raise RuntimeError(f"prowlarr grab missing template values for: {', '.join(unresolved)}")
+            json_body = cleaned
+        return {
+            "method": method,
+            "url": url,
+            "headers": headers,
+            "params": params,
+            "json": json_body,
+            "form": form,
+            "selected": selected,
+        }
+
+    requests_to_send = [req for req in (build_request(item) for item in normalized_selections) if req]
+    if not requests_to_send:
+        return data
 
     if context.dry_run:
         data.setdefault("dispatch", {})["prowlarr"] = {
             "status": "dry_run",
-            "request": {
-                "method": method,
-                "url": _redact_apikey(url),
-                "headers": _redact_headers(headers),
-                "params": params,
-                "json": json_body,
-                "form": form,
-            },
+            "requests": [
+                {
+                    "method": req["method"],
+                    "url": _redact_apikey(req["url"]),
+                    "headers": _redact_headers(req["headers"]),
+                    "params": req["params"],
+                    "json": req["json"],
+                    "form": req["form"],
+                    "title": req["selected"].get("title") or req["selected"].get("name"),
+                }
+                for req in requests_to_send
+            ],
         }
+        if len(requests_to_send) == 1:
+            req = requests_to_send[0]
+            data["dispatch"]["prowlarr"]["request"] = {
+                "method": req["method"],
+                "url": _redact_apikey(req["url"]),
+                "headers": _redact_headers(req["headers"]),
+                "params": req["params"],
+                "json": req["json"],
+                "form": req["form"],
+            }
         data["work"] = work
         return data
-    with provider_slot("prowlarr", provider_concurrency(context.config, "prowlarr")):
-        enforce_rate_limit("prowlarr", provider_rate_limit(context.config, "prowlarr"))
-        response = request_with_retry(
-            method,
-            url,
-            headers=headers,
-            params=params,
-            json=json_body,
-            data=form,
-            timeout=step_cfg.get("timeout", prow_cfg.get("timeout", 30)),
-            retries=int(step_cfg.get("retries") or 0),
-            backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-            max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-            retry_statuses=step_cfg.get("retry_statuses"),
+
+    responses = []
+    for req in requests_to_send:
+        with provider_slot("prowlarr", provider_concurrency(context.config, "prowlarr")):
+            enforce_rate_limit("prowlarr", provider_rate_limit(context.config, "prowlarr"))
+            response = request_with_retry(
+                req["method"],
+                req["url"],
+                headers=req["headers"],
+                params=req["params"],
+                json=req["json"],
+                data=req["form"],
+                timeout=step_cfg.get("timeout", prow_cfg.get("timeout", 30)),
+                retries=int(step_cfg.get("retries") or 0),
+                backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
+                max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
+                retry_statuses=step_cfg.get("retry_statuses"),
+            )
+        response.raise_for_status()
+        try:
+            payload = response.json()
+        except json.JSONDecodeError:
+            payload = {"text": response.text}
+        responses.append(
+            {
+                "response": payload,
+                "method": req["method"],
+                "url": _redact_apikey(req["url"]),
+                "title": req["selected"].get("title") or req["selected"].get("name"),
+            }
         )
-    response.raise_for_status()
-    try:
-        payload = response.json()
-    except json.JSONDecodeError:
-        payload = {"text": response.text}
 
     data.setdefault("dispatch", {})["prowlarr"] = {
         "status": "ok",
-        "response": payload,
-        "url": _redact_apikey(url),
+        "responses": responses,
+        "count": len(responses),
     }
+    if len(responses) == 1:
+        data["dispatch"]["prowlarr"]["response"] = responses[0]["response"]
+        data["dispatch"]["prowlarr"]["url"] = responses[0]["url"]
     data["work"] = work
     return data
 
@@ -2868,6 +2948,56 @@ def decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> 
         data["work"] = work
         return data
     candidates = work.get("candidates", []) or []
+
+    def candidate_rank(candidate: Any) -> float:
+        if not isinstance(candidate, dict):
+            return 0.0
+        rank = candidate.get("rank") or {}
+        try:
+            return float(rank.get("score") or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    if media_type == "book" and candidates:
+        book_cfg = context.config.get("book") or {}
+        if book_cfg.get("auto_select_each_format", True):
+            requested_formats = (data.get("filter") or {}).get("book_format", {}).get("requested") or []
+            requested = set(requested_formats)
+            if not requested:
+                default_format = str(book_cfg.get("default_format") or "").lower()
+                if default_format == "both":
+                    requested = {"ebook", "audiobook"}
+                elif default_format:
+                    requested = {default_format}
+            if {"ebook", "audiobook"}.issubset(requested):
+                selected_items = []
+                selected_indices = []
+                for fmt in ("ebook", "audiobook"):
+                    matching = [
+                        candidate
+                        for candidate in candidates
+                        if isinstance(candidate, dict)
+                        and fmt in set((candidate.get("derived") or {}).get("book_formats") or [])
+                    ]
+                    if not matching:
+                        continue
+                    selected = max(matching, key=candidate_rank)
+                    if selected not in selected_items:
+                        selected_items.append(selected)
+                        selected_indices.append(candidates.index(selected))
+                if len(selected_items) >= 2:
+                    work["selected"] = selected_items[0]
+                    work["selected_items"] = selected_items
+                    data["work"] = work
+                    data["decision"] = {
+                        "status": "selected",
+                        "reason": "book_formats",
+                        "selected": selected_items[0],
+                        "selected_items": selected_items,
+                        "indices": selected_indices,
+                    }
+                    return data
+
     decision = {
         "status": "needs_choice",
         "reason": "no_candidates",

@@ -414,8 +414,10 @@ steps:
 - You can also pass `--pref book_format=ebook` or `--pref book_format=audiobook`.
 - The default can be set in config via `book.default_format` (ebook, audiobook, or both).
 
-If a format is specified, candidates are filtered to that type; otherwise, all
-results remain and the decision step handles selection.
+When `book.default_format` or `--book-format` is `both`, IWantIt tries to select
+one top-ranked ebook and one top-ranked audiobook, then sends both to Prowlarr on
+confirm. If a single format is specified, candidates are filtered to that type;
+otherwise, all results remain and the decision step handles selection.
 
 ## Redacted enrichment
 When a candidate is from Redacted, `redacted_enrich` pulls group/torrent metadata
