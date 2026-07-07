@@ -88,3 +88,40 @@ class BookWorkflowTests(TestCase):
         self.assertEqual(requests[1]["json"]["guid"], "audio-guid")
         self.assertEqual(requests[0]["json"]["downloadClientId"], 20)
         self.assertEqual(requests[1]["json"]["downloadClientId"], 21)
+
+    def test_audiobook_ranking_prefers_newer_m4b_over_stale_mp3(self) -> None:
+        config = default_config()
+        context = Context(config=config, state_path="", dry_run=True)
+        data = {
+            "request": {
+                "query": "Basic Economics Sowell",
+                "media_type": "book",
+                "preferences": {"book_format": "audiobook"},
+            },
+            "work": {
+                "media_type": "book",
+                "candidates": [
+                    {
+                        "title": "Basic Economics by Thomas Sowell [ENG / MP3]",
+                        "indexer": "MyAnonamouse",
+                        "seeders": 118,
+                        "grabs": 946,
+                        "age_hours": 83088,
+                    },
+                    {
+                        "title": "Basic Economics by Thomas Sowell [ENG / M4B]",
+                        "indexer": "MyAnonamouse",
+                        "seeders": 27,
+                        "grabs": 56,
+                        "age_hours": 5087,
+                    },
+                ],
+            },
+        }
+
+        data = book_decide(data, config["steps"]["book_decide"], context)
+        data = rank_releases(data, config["steps"]["rank_releases"], context)
+
+        candidates = data["work"]["candidates"]
+        self.assertIn("M4B", candidates[0]["title"])
+        self.assertGreater(candidates[0]["rank"]["score"], candidates[1]["rank"]["score"])

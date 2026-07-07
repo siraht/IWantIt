@@ -1054,7 +1054,7 @@ def _derive_audio_fields(text: str) -> dict[str, Any]:
             derived["sample_rate_khz"] = float(match.group(1))
         except ValueError:
             pass
-    match = re.search(r"\b(\d{2,4})\s*kbps\b", text, flags=re.IGNORECASE)
+    match = re.search(r"\b(\d{2,4})\s*k(?:bps|b)?\b", text, flags=re.IGNORECASE)
     if match:
         try:
             derived["bitrate_kbps"] = int(match.group(1))

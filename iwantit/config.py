@@ -392,12 +392,21 @@ def default_config() -> dict[str, Any]:
                 "source_priority": ["myanonamouse", "mam"],
                 "source_priority_weight": 120,
                 "score": [
-                    {"match": r"(?i)\b(epub|mobi|azw3|pdf|kindle)\b", "score": 25, "label": "ebook"},
-                    {"match": r"(?i)\b(audiobook|audio book|audible|m4b|aax)\b", "score": 25, "label": "audiobook"},
+                    {"match": r"(?i)\bepub\b", "score": 70, "label": "EPUB"},
+                    {"match": r"(?i)\bazw3?\b", "score": 55, "label": "AZW"},
+                    {"match": r"(?i)\bmobi\b", "score": 35, "label": "MOBI"},
+                    {"match": r"(?i)\bpdf\b", "score": 10, "label": "PDF"},
+                    {"match": r"(?i)\bm4b\b", "score": 90, "label": "M4B"},
+                    {"match": r"(?i)\baax\b", "score": 85, "label": "AAX"},
+                    {"match": r"(?i)\bmp3\b", "score": 35, "label": "MP3"},
+                    {"match": r"(?i)\b(audiobook|audio book|audible)\b", "score": 20, "label": "audiobook"},
+                    {"match": r"(?i)\b(320|256|192|128|96|64)\s*k(?:bps|b)?\b", "score": 10, "label": "bitrate_tag"},
                 ],
                 "numeric_fields": [
-                    {"path": "seeders", "weight": 0.5, "max": 200, "label": "seeders"},
-                    {"path": "grabs", "weight": 0.1, "max": 500, "label": "grabs"},
+                    {"path": "seeders", "weight": 0.4, "max": 250, "label": "seeders"},
+                    {"path": "grabs", "weight": 0.04, "max": 500, "label": "grabs"},
+                    {"path": "derived.bitrate_kbps", "weight": 0.12, "max": 192, "label": "bitrate"},
+                    {"path": "age_hours", "weight": -6.0, "scale": 8760, "max": 10, "label": "age_years"},
                 ],
                 "format_rules": {
                     "audiobook": {
