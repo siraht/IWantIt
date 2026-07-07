@@ -54,15 +54,28 @@ class BookWorkflowTests(TestCase):
 
     def test_grab_builds_requests_for_selected_book_formats(self) -> None:
         config = default_config()
-        config["prowlarr"]["download_clients"]["book"] = 20
+        config["prowlarr"]["download_clients"]["book"] = {
+            "ebook": 20,
+            "audiobook": 21,
+        }
         context = Context(config=config, state_path="", dry_run=True)
         data = {
             "request": {"media_type": "book"},
             "work": {
                 "media_type": "book",
                 "selected_items": [
-                    {"title": "Tao Te Ching EPUB", "guid": "ebook-guid", "indexer_id": 1},
-                    {"title": "Tao Te Ching Audiobook", "guid": "audio-guid", "indexer_id": 1},
+                    {
+                        "title": "Tao Te Ching EPUB",
+                        "guid": "ebook-guid",
+                        "indexer_id": 1,
+                        "derived": {"book_formats": ["ebook"]},
+                    },
+                    {
+                        "title": "Tao Te Ching Audiobook",
+                        "guid": "audio-guid",
+                        "indexer_id": 1,
+                        "derived": {"book_formats": ["audiobook"]},
+                    },
                 ],
             },
         }
@@ -74,4 +87,4 @@ class BookWorkflowTests(TestCase):
         self.assertEqual(requests[0]["json"]["guid"], "ebook-guid")
         self.assertEqual(requests[1]["json"]["guid"], "audio-guid")
         self.assertEqual(requests[0]["json"]["downloadClientId"], 20)
-        self.assertEqual(requests[1]["json"]["downloadClientId"], 20)
+        self.assertEqual(requests[1]["json"]["downloadClientId"], 21)

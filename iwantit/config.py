@@ -252,7 +252,11 @@ def default_config() -> dict[str, Any]:
             "timeout": 30,
             "download_clients": {
                 "music": "Music",
-                "book": "Gen/Books",
+                "book": {
+                    "ebook": "Books",
+                    "audiobook": "Audiobooks",
+                    "default": "Books",
+                },
                 "movie": "Movies",
                 "tv": "TV",
             },
@@ -260,7 +264,8 @@ def default_config() -> dict[str, Any]:
                 {"client_name": "Music", "categories": [3010, 3040, 3050, 3060]},
                 {"client_name": "Movies", "categories": [3020], "category_prefixes": [2]},
                 {"client_name": "TV", "category_prefixes": [5]},
-                {"client_name": "Gen/Books", "categories": [3030], "category_prefixes": [7]},
+                {"client_name": "Audiobooks", "categories": [3030]},
+                {"client_name": "Books", "categories": [7000, 7020, 7040], "category_prefixes": [7]},
             ],
             "search": {
                 "indexer_ids": {

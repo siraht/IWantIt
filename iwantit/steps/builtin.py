@@ -2251,6 +2251,40 @@ def _set_download_client(
     return True
 
 
+def _book_format_for_candidate(candidate: dict[str, Any]) -> str | None:
+    derived = candidate.get("derived") or {}
+    if isinstance(derived, dict):
+        formats = set(derived.get("book_formats") or [])
+        if "audiobook" in formats:
+            return "audiobook"
+        if "ebook" in formats:
+            return "ebook"
+    text = _get_candidate_text(
+        candidate,
+        ["title", "name", "_raw.title", "_raw.name", "releaseTitle", "release_title"],
+    ).lower()
+    if re.search(r"\b(audiobook|audio book|audible|m4b|aax|mp3)\b", text):
+        return "audiobook"
+    if re.search(r"\b(ebook|e-book|epub|mobi|azw3?|pdf|kindle)\b", text):
+        return "ebook"
+    return None
+
+
+def _download_client_ref_for_selection(
+    selected: dict[str, Any],
+    media_type: str | None,
+    prow_cfg: dict[str, Any],
+) -> Any:
+    download_clients = prow_cfg.get("download_clients", {})
+    media_ref = _select_media_mapping(download_clients, media_type)
+    if isinstance(media_ref, dict) and media_type == "book":
+        fmt = _book_format_for_candidate(selected)
+        if fmt and fmt in media_ref:
+            return media_ref.get(fmt)
+        return media_ref.get("default")
+    return media_ref
+
+
 def _resolve_download_client_ref(
     candidate: dict[str, Any], rules: list[dict[str, Any]] | None
 ) -> Any:
@@ -2672,9 +2706,13 @@ def prowlarr_grab(
 
     media_type = work.get("media_type") or data.get("request", {}).get("media_type")
     prow_cfg = context.config.get("prowlarr", {})
-    download_clients = prow_cfg.get("download_clients", {})
     if media_type and not work.get("download_client_id"):
-        _set_download_client(work, download_clients.get(media_type), context, prow_cfg)
+        _set_download_client(
+            work,
+            _download_client_ref_for_selection(normalized_selections[0], media_type, prow_cfg),
+            context,
+            prow_cfg,
+        )
     if not work.get("download_client_id"):
         rules_cfg = prow_cfg.get("download_client_rules")
         if isinstance(rules_cfg, dict):
@@ -2691,11 +2729,24 @@ def prowlarr_grab(
 
     def build_request(selected: dict[str, Any]) -> dict[str, Any] | None:
         previous = work.get("selected")
+        previous_client_id = work.get("download_client_id")
+        previous_client_name = work.get("download_client_name")
+        client_ref = _download_client_ref_for_selection(selected, media_type, prow_cfg)
+        if client_ref is not None:
+            _set_download_client(work, client_ref, context, prow_cfg)
         work["selected"] = selected
         try:
             rendered = render_template(request_cfg, data, context.config)
         finally:
             work["selected"] = previous
+            if previous_client_id is None:
+                work.pop("download_client_id", None)
+            else:
+                work["download_client_id"] = previous_client_id
+            if previous_client_name is None:
+                work.pop("download_client_name", None)
+            else:
+                work["download_client_name"] = previous_client_name
         url = rendered.get("url")
         if not url:
             base_url = prow_cfg.get("url")

@@ -18,7 +18,9 @@ Configured Prowlarr download client names:
 | Movies | `Movies` | `http://192.168.1.222:11113`, `https://movies.hinton.link/` |
 | TV | `TV` | `http://192.168.1.222:11114`, `https://tv.hinton.link/` |
 | Music | `Music` | `http://192.168.1.222:11112`, `https://music.hinton.link/` |
-| General/books | `Gen/Books` | `http://192.168.1.222:11111`, `https://general.hinton.link/` |
+| Books | `Books` | `http://192.168.1.222:11111`, `https://general.hinton.link/` |
+| Audiobooks | `Audiobooks` | `http://192.168.1.222:11111`, `https://general.hinton.link/` |
+| General fallback | `Gen/Books` | `http://192.168.1.222:11111`, `https://general.hinton.link/` |
 
 ## Books and Audiobooks
 
@@ -38,9 +40,10 @@ Relevant categories:
 - Ebooks/books: `7000`, `7020`, `7040`
 - Audiobooks: `3030`
 
-IWantIt resolves download-client names through Prowlarr before grabbing. The
-local general/books client is named `Gen/Books`; Prowlarr owns its save paths
-and category behavior.
+IWantIt resolves download-client names through Prowlarr before grabbing. Ebook
+releases should use the `Books` client, which saves to `/data/visualmedia`.
+Audiobook releases should use the `Audiobooks` client, which saves to
+`/data/audiobooks`. `Gen/Books` is a fallback only.
 
 ## Legacy/Fallback Services
 

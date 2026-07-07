@@ -374,7 +374,10 @@ routing is preferred because Prowlarr owns the final client IDs.
 prowlarr:
   download_clients:
     music: Music
-    book: Gen/Books
+    book:
+      ebook: Books
+      audiobook: Audiobooks
+      default: Books
   download_client_rules:
     - client_name: Music
       categories: [3010, 3040, 3050, 3060]
@@ -383,8 +386,9 @@ prowlarr:
       category_prefixes: [2]  # matches 2xxx
     - client_name: TV
       category_prefixes: [5]  # matches 5xxx
-    - client_name: Gen/Books
+    - client_name: Audiobooks
       categories: [3030]
+    - client_name: Books
       category_prefixes: [7]  # matches 7xxx
 ```
 
