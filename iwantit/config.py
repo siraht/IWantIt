@@ -149,7 +149,10 @@ def default_config() -> dict[str, Any]:
             },
             "filter_match": {
                 "builtin": "filter_match",
-                "min_match_ratio": 0.4,
+                "min_match_ratio": {
+                    "default": 0.4,
+                    "book": 0.25,
+                },
                 "min_token_matches": 2,
                 "keep_original_on_empty": False,
             },

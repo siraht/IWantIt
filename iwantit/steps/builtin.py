@@ -1551,7 +1551,10 @@ def identify_web_search(
     if looks_like_url(original):
         original = request.get("query") or original
     limit = int(step_cfg.get("result_limit") or response_cfg.get("limit") or 5)
-    min_match_ratio = float(step_cfg.get("min_match_ratio") or 0.4)
+    min_match_ratio_cfg = step_cfg.get("min_match_ratio")
+    if isinstance(min_match_ratio_cfg, dict):
+        min_match_ratio_cfg = _select_media_mapping(min_match_ratio_cfg, media_type)
+    min_match_ratio = float(min_match_ratio_cfg or 0.4)
     min_token_matches = int(step_cfg.get("min_token_matches") or 2)
     min_confirmations = int(step_cfg.get("min_confirmations") or 2)
     single_match_ratio = float(step_cfg.get("single_match_ratio") or 0.75)
@@ -2312,7 +2315,10 @@ def filter_match(
     if not query_tokens:
         return data
 
-    min_match_ratio = float(step_cfg.get("min_match_ratio") or 0.4)
+    min_match_ratio_cfg = step_cfg.get("min_match_ratio")
+    if isinstance(min_match_ratio_cfg, dict):
+        min_match_ratio_cfg = _select_media_mapping(min_match_ratio_cfg, media_type)
+    min_match_ratio = float(min_match_ratio_cfg or 0.4)
     min_token_matches = int(step_cfg.get("min_token_matches") or 2)
     title_fields = step_cfg.get("title_fields") or [
         "title",
