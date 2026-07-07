@@ -1063,6 +1063,92 @@ def _derive_audio_fields(text: str) -> dict[str, Any]:
     return derived
 
 
+def _extract_edition_number(text: str) -> int | None:
+    if not text:
+        return None
+    patterns = [
+        r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:edition|ed\.?)\b",
+        r"\b(?:edition|ed\.?)\s*(\d{1,2})\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        try:
+            return int(match.group(1))
+        except ValueError:
+            continue
+    return None
+
+
+def _book_format_labels(text: str) -> set[str]:
+    lowered = text.lower()
+    formats: set[str] = set()
+    if re.search(r"\b(audiobook|audio book|audible)\b", lowered):
+        formats.add("audiobook")
+    if re.search(r"\b(m4b|m4a|mp3|aax|aac|ogg|opus|flac|wav|wma|mka|webm)\b", lowered) and "ebook" not in lowered:
+        formats.add("audiobook")
+    if re.search(r"\b(ebook|e-book|epub|kepub|kpub|mobi|azw4?|azw3|pdf|djvu|kindle|fb2|lit|rtf|txt|odt|docx?)\b", lowered):
+        formats.add("ebook")
+    if re.search(r"\b(cbz|cbr|cb7|cbt|comic|graphic novel)\b", lowered):
+        formats.add("ebook")
+    return formats
+
+
+def _audio_quality_score(codec: str | None, bitrate: int | None) -> float | None:
+    codec = (codec or "").lower()
+    if not bitrate or bitrate <= 0:
+        return None
+    if codec in {"opus", "ogg"}:
+        return min(100.0, bitrate * 1.6)
+    if codec in {"m4b", "m4a", "aac", "aax"}:
+        return min(100.0, bitrate * 1.15)
+    if codec == "mp3":
+        return min(100.0, bitrate / 1.92)
+    if codec in {"flac", "wav"}:
+        return 65.0
+    return min(100.0, bitrate / 1.5)
+
+
+def _derive_book_fields(text: str) -> dict[str, Any]:
+    derived: dict[str, Any] = {}
+    if not text:
+        return derived
+    lowered = text.lower()
+    edition = _extract_edition_number(text)
+    if edition is not None:
+        derived["edition_number"] = edition
+    year = _extract_year(text)
+    if year:
+        derived["book_release_year"] = year
+        derived["book_release_year_score"] = max(0, year - 1900)
+
+    codec_patterns = [
+        ("m4b", r"\bm4b\b"),
+        ("m4a", r"\bm4a\b"),
+        ("aax", r"\baax\b"),
+        ("aac", r"\baac\b"),
+        ("opus", r"\bopus\b"),
+        ("ogg", r"\bogg\b"),
+        ("mp3", r"\bmp3\b"),
+        ("flac", r"\bflac\b"),
+        ("wav", r"\bwav\b"),
+    ]
+    for codec, pattern in codec_patterns:
+        if re.search(pattern, lowered):
+            derived["audio_codec"] = codec
+            break
+    quality = _audio_quality_score(derived.get("audio_codec"), derived.get("bitrate_kbps"))
+    if quality is not None:
+        derived["audio_quality_score"] = quality
+
+    if "unabridged" in lowered:
+        derived["abridgement_score"] = 40
+    elif "abridged" in lowered:
+        derived["abridgement_score"] = -80
+    return derived
+
+
 def _release_category_for_candidate(candidate: dict[str, Any], release_type_map: dict[int, str]) -> str:
     title = str(candidate.get("title") or "").lower()
     red = candidate.get("redacted") or {}
@@ -2506,6 +2592,9 @@ def rank_releases(
     rules = rules_cfg.get(media_type) or rules_cfg.get("default") or {}
     preferences = data.get("request", {}).get("preferences", {}) or {}
     rules = _apply_format_rules(rules, preferences)
+    request_query = str(data.get("request", {}).get("query") or "")
+    requested_edition = _extract_edition_number(request_query) if media_type == "book" else None
+    requested_year = _extract_year(request_query) if media_type == "book" else None
 
     title_fields = step_cfg.get("title_fields") or rules.get(
         "title_fields",
@@ -2525,6 +2614,10 @@ def rank_releases(
             candidate = {"title": str(item)}
         text = _get_candidate_text(candidate, title_fields)
         derived = _derive_audio_fields(text)
+        if media_type == "book":
+            book_derived = _derive_book_fields(text)
+            if book_derived:
+                derived.update(book_derived)
         if derived:
             existing = candidate.get("derived")
             if isinstance(existing, dict):
@@ -2587,6 +2680,31 @@ def rank_releases(
             weight = float(entry.get("weight", 1.0))
             score += numeric * weight
             reasons.append(entry.get("label") or f"{path}:{numeric}*{weight}")
+
+        if media_type == "book" and isinstance(candidate.get("derived"), dict):
+            candidate_derived = candidate["derived"]
+            edition = candidate_derived.get("edition_number")
+            if requested_edition and edition:
+                try:
+                    if int(edition) == int(requested_edition):
+                        score += 100
+                        reasons.append("requested_edition")
+                    else:
+                        score -= 80
+                        reasons.append("edition_mismatch")
+                except (TypeError, ValueError):
+                    pass
+            year = candidate_derived.get("book_release_year")
+            if requested_year and year:
+                try:
+                    if int(year) == int(requested_year):
+                        score += 80
+                        reasons.append("requested_year")
+                    else:
+                        score -= 60
+                        reasons.append("year_mismatch")
+                except (TypeError, ValueError):
+                    pass
 
         release_priority = rules.get("release_priority") or []
         if isinstance(release_priority, list) and release_priority:
@@ -3203,20 +3321,40 @@ def book_decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context
         "audio book": "audiobook",
         "audible": "audiobook",
         "m4b": "audiobook",
+        "m4a": "audiobook",
         "mp3": "audiobook",
         "aax": "audiobook",
         "aac": "audiobook",
         "ogg": "audiobook",
+        "opus": "audiobook",
+        "flac": "audiobook",
+        "wav": "audiobook",
+        "wma": "audiobook",
+        "mka": "audiobook",
+        "webm": "audiobook",
         "ebook": "ebook",
         "ebooks": "ebook",
         "e-book": "ebook",
         "e book": "ebook",
         "epub": "ebook",
+        "kepub": "ebook",
+        "kpub": "ebook",
         "mobi": "ebook",
         "azw": "ebook",
         "azw3": "ebook",
+        "azw4": "ebook",
         "pdf": "ebook",
+        "djvu": "ebook",
         "kindle": "ebook",
+        "cbz": "ebook",
+        "cbr": "ebook",
+        "cb7": "ebook",
+        "cbt": "ebook",
+        "comic": "ebook",
+        "fb2": "ebook",
+        "lit": "ebook",
+        "rtf": "ebook",
+        "txt": "ebook",
         "both": "both",
         "all": "both",
     }
@@ -3236,14 +3374,7 @@ def book_decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context
 
     def detect_formats(candidate: dict[str, Any]) -> set[str]:
         text = _get_candidate_text(candidate, title_fields).lower()
-        formats: set[str] = set()
-        if re.search(r"\b(audiobook|audio book|audible)\b", text):
-            formats.add("audiobook")
-        if re.search(r"\b(m4b|mp3|aax|aac|ogg)\b", text) and "ebook" not in text:
-            formats.add("audiobook")
-        if re.search(r"\b(ebook|e-book|epub|mobi|azw3?|pdf|kindle)\b", text):
-            formats.add("ebook")
-        return formats
+        return _book_format_labels(text)
 
     enriched: list[dict[str, Any]] = []
     for cand in candidates:

@@ -125,3 +125,70 @@ class BookWorkflowTests(TestCase):
         candidates = data["work"]["candidates"]
         self.assertIn("M4B", candidates[0]["title"])
         self.assertGreater(candidates[0]["rank"]["score"], candidates[1]["rank"]["score"])
+
+    def test_detects_kepub_and_opus_formats(self) -> None:
+        config = default_config()
+        context = Context(config=config, state_path="", dry_run=True)
+        data = {
+            "request": {
+                "query": "Example Book",
+                "media_type": "book",
+                "preferences": {"book_format": "both"},
+            },
+            "work": {
+                "media_type": "book",
+                "candidates": [
+                    {"title": "Example Book [ENG / KEPUB]", "indexer": "MyAnonamouse"},
+                    {"title": "Example Book [ENG / OPUS 64k]", "indexer": "MyAnonamouse"},
+                ],
+            },
+        }
+
+        data = book_decide(data, config["steps"]["book_decide"], context)
+        formats = [set(item["derived"]["book_formats"]) for item in data["work"]["candidates"]]
+        self.assertIn({"ebook"}, formats)
+        self.assertIn({"audiobook"}, formats)
+
+    def test_newer_edition_wins_when_edition_not_requested(self) -> None:
+        config = default_config()
+        context = Context(config=config, state_path="", dry_run=True)
+        data = {
+            "request": {
+                "query": "Example Economics",
+                "media_type": "book",
+                "preferences": {"book_format": "ebook"},
+            },
+            "work": {
+                "media_type": "book",
+                "candidates": [
+                    {"title": "Example Economics 3rd Edition 2008 [EPUB]", "indexer": "MyAnonamouse", "seeders": 50},
+                    {"title": "Example Economics 5th Edition 2014 [EPUB]", "indexer": "MyAnonamouse", "seeders": 10},
+                ],
+            },
+        }
+
+        data = book_decide(data, config["steps"]["book_decide"], context)
+        data = rank_releases(data, config["steps"]["rank_releases"], context)
+        self.assertIn("5th Edition", data["work"]["candidates"][0]["title"])
+
+    def test_requested_edition_overrides_newest_edition(self) -> None:
+        config = default_config()
+        context = Context(config=config, state_path="", dry_run=True)
+        data = {
+            "request": {
+                "query": "Example Economics 3rd Edition",
+                "media_type": "book",
+                "preferences": {"book_format": "ebook"},
+            },
+            "work": {
+                "media_type": "book",
+                "candidates": [
+                    {"title": "Example Economics 3rd Edition 2008 [EPUB]", "indexer": "MyAnonamouse", "seeders": 5},
+                    {"title": "Example Economics 5th Edition 2014 [EPUB]", "indexer": "MyAnonamouse", "seeders": 80},
+                ],
+            },
+        }
+
+        data = book_decide(data, config["steps"]["book_decide"], context)
+        data = rank_releases(data, config["steps"]["rank_releases"], context)
+        self.assertIn("3rd Edition", data["work"]["candidates"][0]["title"])
