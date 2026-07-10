@@ -36,6 +36,12 @@ def builtin_provider_registry() -> dict[str, dict[str, Any]]:
             "optional_keys": ["prowlarr.search", "prowlarr.grab"],
             "rate_limit": {"requests_per_minute": 120},
             "capabilities": {"search": True, "grab": True},
+            "data_handling": {
+                "classification": "local_private",
+                "persistence": "sanitized_local",
+                "community_publish_allowed": False,
+                "remote_inference_allowed": False,
+            },
         },
         "redacted": {
             "type": "tracker",
@@ -46,6 +52,12 @@ def builtin_provider_registry() -> dict[str, dict[str, Any]]:
             "optional_keys": ["redacted.session_cookie"],
             "rate_limit": {"requests_per_minute": 60},
             "capabilities": {"metadata": True, "comments": True},
+            "data_handling": {
+                "classification": "local_private",
+                "persistence": "sanitized_local",
+                "community_publish_allowed": False,
+                "remote_inference_allowed": False,
+            },
         },
         "radarr": {
             "type": "arr",

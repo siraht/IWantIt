@@ -10,6 +10,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from jsonschema import Draft202012Validator
 
 from .pipeline import BuiltinStep, run_workflow
+from .registry import iter_active_providers, merge_provider_registry
 
 INTENT_SCHEMA_ID = "iwantit.acquisition-intent/1"
 RESULT_SCHEMA_ID = "iwantit.acquisition-result/1"
@@ -233,8 +234,8 @@ class AcquisitionService:
             confirm=confirm,
         )
 
-    @staticmethod
     def _result(
+        self,
         intent: dict[str, Any],
         *,
         status: str,
@@ -259,6 +260,39 @@ class AcquisitionService:
                 "canonical": pipeline.get("canonical") or {},
                 "search": pipeline.get("search") or {},
             },
+            "privacy": self._privacy_contract(intent),
             "error": error or pipeline.get("error"),
         }
         return sanitize_acquisition_output(result)
+
+    def _privacy_contract(self, intent: dict[str, Any]) -> dict[str, Any]:
+        """Declare conservative, machine-readable handling for adapter output."""
+
+        registry = merge_provider_registry(self.config)
+        active_providers = iter_active_providers(self.config)
+        private_providers = sorted(
+            provider
+            for provider in active_providers
+            if (registry.get(provider, {}).get("data_handling") or {}).get(
+                "classification"
+            )
+            == "local_private"
+        )
+        requested_private = (intent.get("policy") or {}).get("private") is True
+        classification = (
+            "local_private" if requested_private or private_providers else "restricted"
+        )
+        return {
+            "classification": classification,
+            "persistence": "sanitized_local",
+            "community_publish_allowed": False,
+            "remote_inference_allowed": False,
+            "provider_payloads_exportable": False,
+            "private_providers": private_providers,
+            "reason": (
+                "The caller requested private handling."
+                if requested_private
+                else "Acquisition candidates remain restricted until a provider-specific "
+                "sharing policy explicitly permits another use."
+            ),
+        }

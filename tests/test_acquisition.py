@@ -55,6 +55,11 @@ class AcquisitionTests(TestCase):
         self.assertEqual(data["acquisition_intent"]["recording"]["ref"], result["recording_ref"])
         self.assertIn("Extended Mix", data["request"]["query"])
         self.assertEqual(data["request"]["release_preferences"]["formats"], ["FLAC"])
+        self.assertEqual(result["privacy"]["classification"], "local_private")
+        self.assertEqual(result["privacy"]["persistence"], "sanitized_local")
+        self.assertFalse(result["privacy"]["community_publish_allowed"])
+        self.assertFalse(result["privacy"]["remote_inference_allowed"])
+        self.assertFalse(result["privacy"]["provider_payloads_exportable"])
 
     def test_dispatch_requires_confirmation_without_calling_pipeline(self) -> None:
         called = False
@@ -144,6 +149,19 @@ class AcquisitionTests(TestCase):
         sanitized = sanitize_acquisition_output(payload)
         self.assertEqual(payload["download_url"], "https://provider/file?link=secret")
         self.assertEqual(sanitized["download_url"], "https://provider/file")
+
+    def test_private_provider_registry_forces_local_only_result_handling(self) -> None:
+        config = {
+            "redacted": {"url": "https://redacted.sh", "api_key": "configured"}
+        }
+
+        result = AcquisitionService(config, {}, runner=lambda *_args: {}).handle(
+            {**intent(), "policy": {"authorized_sources_only": True, "private": False}}
+        )
+
+        self.assertEqual(result["privacy"]["classification"], "local_private")
+        self.assertEqual(result["privacy"]["private_providers"], ["redacted"])
+        self.assertFalse(result["privacy"]["community_publish_allowed"])
 
     def test_cli_exposes_stdin_preview_and_explicit_confirmation(self) -> None:
         parser = build_parser()
