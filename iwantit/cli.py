@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 import requests
 
+from .acquisition import ACQUISITION_INTENT_SCHEMA, AcquisitionContractError, AcquisitionService
 from .config import (
     ensure_config_exists,
     load_config,
@@ -39,6 +40,7 @@ from .util import (
 )
 
 EXIT_NEEDS_CHOICE = 20
+EXIT_CONFIRMATION_REQUIRED = 21
 _FAILED_QUERIES_REL = Path("diagnostics") / "failed_queries.jsonl"
 _COMPACT_LIST_KEYS = {"results", "candidates", "options"}
 _COMPACT_ITEM_KEYS = [
@@ -647,6 +649,34 @@ def cmd_step(args: argparse.Namespace) -> int:
     return 0 if not result.get("error") else 1
 
 
+def cmd_acquire(args: argparse.Namespace) -> int:
+    if args.schema:
+        write_json(ACQUISITION_INTENT_SCHEMA)
+        return 0
+    try:
+        payload = _load_payload(args)
+        if args.confirm:
+            payload["action"] = "dispatch"
+            payload.setdefault("confirmation", {})["approved"] = True
+        config = load_config(ensure_config_exists(args.config))
+        result = AcquisitionService(config, BUILTINS).handle(payload)
+    except (AcquisitionContractError, ValueError) as exc:
+        write_json(
+            {
+                "schema": "iwantit.acquisition-result/1",
+                "status": "error",
+                "error": {"code": "INVALID_INTENT", "message": _safe_error_message(exc)},
+            }
+        )
+        return 1
+    write_json(result)
+    if result["status"] == "confirmation_required":
+        return EXIT_CONFIRMATION_REQUIRED
+    if result["status"] == "needs_choice":
+        return EXIT_NEEDS_CHOICE
+    return 1 if result["status"] == "error" else 0
+
+
 def _load_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.json:
         data = _load_json_file(args.json)
@@ -1128,6 +1158,22 @@ def build_parser() -> argparse.ArgumentParser:
     step_cmd = sub.add_parser("step", parents=[common, input_group], help="Run a single built-in step")
     step_cmd.add_argument("name", help="Built-in step name")
     step_cmd.set_defaults(func=cmd_step)
+
+    acquire_cmd = sub.add_parser(
+        "acquire",
+        parents=[common],
+        help="Preview or dispatch a versioned acquisition intent",
+    )
+    acquire_source = acquire_cmd.add_mutually_exclusive_group()
+    acquire_source.add_argument("--json", help="Acquisition intent JSON file")
+    acquire_source.add_argument("--stdin", action="store_true", help="Read intent JSON from stdin")
+    acquire_cmd.add_argument("--schema", action="store_true", help="Print the intent JSON Schema")
+    acquire_cmd.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Approve and dispatch the intent (side effects allowed)",
+    )
+    acquire_cmd.set_defaults(func=cmd_acquire)
 
     choose_group = argparse.ArgumentParser(add_help=False)
     choose_source = choose_group.add_mutually_exclusive_group()
