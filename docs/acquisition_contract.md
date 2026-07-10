@@ -28,3 +28,22 @@ assertions. A consuming application must keep acquisition records out of any
 community publication, remote inference, or telemetry path unless a future,
 source-specific policy and an explicit user action permit a separately derived
 payload.
+
+## Candidate projection
+
+Private provider responses are never returned verbatim. Each option is projected
+to the closed `iwantit.acquisition-candidate/1` shape containing only:
+
+- a content-derived candidate reference, position, display title, source, and
+  credential-free source URL;
+- normalized release title/artists/year/label/catalog number/tags;
+- normalized edition format/encoding/media/remaster/file count/size;
+- observed seeder/leecher/snatch availability; and
+- numeric ranking plus non-payload reason labels.
+
+Download URLs, raw Prowlarr results, Redacted group/torrent bodies, comments,
+usernames, provider response bodies, and grab requests/responses are excluded.
+Search provenance retains only query, result count, and error type. Dispatch
+provenance retains only provider, status, count, and an opaque returned reference
+when one exists. This is data minimization in addition to credential redaction;
+sanitizing a raw provider payload would not make that payload exportable.

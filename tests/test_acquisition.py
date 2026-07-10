@@ -60,6 +60,8 @@ class AcquisitionTests(TestCase):
         self.assertFalse(result["privacy"]["community_publish_allowed"])
         self.assertFalse(result["privacy"]["remote_inference_allowed"])
         self.assertFalse(result["privacy"]["provider_payloads_exportable"])
+        self.assertEqual(result["candidates"][0]["schema"], "iwantit.acquisition-candidate/1")
+        self.assertEqual(result["candidates"][0]["source"], "unknown")
 
     def test_dispatch_requires_confirmation_without_calling_pipeline(self) -> None:
         called = False
@@ -95,7 +97,8 @@ class AcquisitionTests(TestCase):
         self.assertEqual(result["status"], "dispatched")
         self.assertTrue(result["side_effects_allowed"])
         self.assertEqual(result["provenance"]["run_id"], "run-dispatch")
-        self.assertEqual(result["selected"]["id"], "candidate")
+        self.assertEqual(result["selected"]["schema"], "iwantit.acquisition-candidate/1")
+        self.assertEqual(result["selected"]["title"], "Candidate")
 
     def test_invalid_intent_fails_closed(self) -> None:
         payload = intent()
@@ -103,7 +106,7 @@ class AcquisitionTests(TestCase):
         with self.assertRaisesRegex(AcquisitionContractError, "desired.formats"):
             AcquisitionService({}, {}).handle(payload)
 
-    def test_result_redacts_provider_access_material_recursively(self) -> None:
+    def test_result_projects_private_provider_payload_into_closed_summary(self) -> None:
         def runner(_data, _dry_run, _confirm, _choice):  # noqa: ANN001
             return {
                 "run_id": "run-secret",
@@ -111,7 +114,29 @@ class AcquisitionTests(TestCase):
                     "candidates": [
                         {
                             "title": "Track",
+                            "indexer": "Redacted",
+                            "seeders": 12,
                             "download_url": "http://provider/download?link=secret&safe=yes",
+                            "info_url": "https://redacted.sh/torrents.php?id=41&torrentid=99&token=secret",
+                            "redacted": {
+                                "group": {
+                                    "name": "Track Release",
+                                    "year": 2025,
+                                    "recordLabel": "Private Label",
+                                    "tags": ["deep-house"],
+                                    "wikiBody": "large private provider payload",
+                                },
+                                "torrent": {
+                                    "format": "FLAC",
+                                    "encoding": "Lossless",
+                                    "media": "WEB",
+                                    "size": 12345,
+                                    "seeders": 12,
+                                    "leechers": 2,
+                                    "fileCount": 4,
+                                    "username": "private-user",
+                                },
+                            },
                             "_raw": {
                                 "downloadUrl": "http://provider/raw?apikey=secret",
                                 "infoUrl": "https://catalog/item?id=42&token=secret",
@@ -136,19 +161,66 @@ class AcquisitionTests(TestCase):
         result = AcquisitionService({}, {}, runner=runner).handle(intent())
 
         candidate = result["candidates"][0]
-        self.assertEqual(candidate["download_url"], "http://provider/download")
-        self.assertEqual(candidate["_raw"]["downloadUrl"], "http://provider/raw")
-        self.assertEqual(candidate["_raw"]["infoUrl"], "https://catalog/item?id=42")
-        self.assertEqual(candidate["_raw"]["authorization"], "***")
-        search_result = result["provenance"]["search"]["provider"]["results"][0]
-        self.assertEqual(search_result["download_url"], "https://provider/file")
-        self.assertEqual(search_result["cookie"], "***")
+        self.assertEqual(
+            set(candidate),
+            {
+                "schema",
+                "candidate_ref",
+                "position",
+                "title",
+                "source",
+                "source_url",
+                "release",
+                "edition",
+                "availability",
+                "ranking",
+            },
+        )
+        self.assertEqual(candidate["source"], "Redacted")
+        self.assertEqual(
+            candidate["source_url"],
+            "https://redacted.sh/torrents.php?id=41&torrentid=99",
+        )
+        self.assertEqual(candidate["release"]["tags"], ["deep-house"])
+        self.assertEqual(candidate["edition"]["format"], "FLAC")
+        self.assertEqual(candidate["edition"]["size_bytes"], 12345)
+        self.assertEqual(candidate["availability"]["seeders"], 12)
+        self.assertNotIn("download_url", candidate)
+        self.assertNotIn("redacted", candidate)
+        self.assertNotIn("_raw", candidate)
+        self.assertEqual(
+            result["provenance"]["search"]["provider"],
+            {"query": "", "count": 0, "error_type": None},
+        )
+        serialized = str(result)
+        self.assertNotIn("large private provider payload", serialized)
+        self.assertNotIn("private-user", serialized)
+        self.assertNotIn("Bearer secret", serialized)
 
     def test_sanitizer_does_not_mutate_pipeline_payload(self) -> None:
         payload = {"download_url": "https://provider/file?link=secret"}
         sanitized = sanitize_acquisition_output(payload)
         self.assertEqual(payload["download_url"], "https://provider/file?link=secret")
         self.assertEqual(sanitized["download_url"], "https://provider/file")
+
+    def test_candidate_reference_does_not_hash_access_credentials(self) -> None:
+        service = AcquisitionService({}, {})
+        first = service._project_candidate(
+            {
+                "title": "Track",
+                "info_url": "https://provider/item?id=1&token=first-secret",
+            },
+            0,
+        )
+        second = service._project_candidate(
+            {
+                "title": "Track",
+                "info_url": "https://provider/item?id=1&token=second-secret",
+            },
+            0,
+        )
+
+        self.assertEqual(first["candidate_ref"], second["candidate_ref"])
 
     def test_private_provider_registry_forces_local_only_result_handling(self) -> None:
         config = {
