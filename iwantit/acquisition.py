@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from jsonschema import Draft202012Validator
 
@@ -83,6 +85,46 @@ WorkflowRunner = Callable[[dict[str, Any], bool, bool, int | None], dict[str, An
 
 class AcquisitionContractError(ValueError):
     pass
+
+
+_SECRET_KEYS = {
+    "api-key",
+    "api_key",
+    "apikey",
+    "authorization",
+    "cookie",
+    "password",
+    "secret",
+    "token",
+}
+_SECRET_QUERY_KEYS = _SECRET_KEYS | {"auth", "key", "link", "sig", "signature"}
+_DOWNLOAD_URL_KEYS = {"downloadurl", "download_url"}
+
+
+def sanitize_acquisition_output(value: Any, *, parent_key: str = "") -> Any:
+    """Return a deep-copied result with provider access material removed."""
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, child in value.items():
+            normalized = str(key).lower()
+            if normalized in _SECRET_KEYS:
+                sanitized[key] = "***"
+            else:
+                sanitized[key] = sanitize_acquisition_output(child, parent_key=normalized)
+        return sanitized
+    if isinstance(value, list):
+        return [sanitize_acquisition_output(child, parent_key=parent_key) for child in value]
+    if not isinstance(value, str) or not value.startswith(("http://", "https://")):
+        return copy.deepcopy(value)
+    try:
+        parsed = urlparse(value)
+        if parent_key in _DOWNLOAD_URL_KEYS:
+            return urlunparse(parsed._replace(query="", fragment=""))
+        parameters = parse_qsl(parsed.query, keep_blank_values=True)
+        safe = [(key, item) for key, item in parameters if key.lower() not in _SECRET_QUERY_KEYS]
+        return urlunparse(parsed._replace(query=urlencode(safe), fragment=""))
+    except ValueError:
+        return "[redacted invalid URL]"
 
 
 class AcquisitionService:
@@ -201,7 +243,7 @@ class AcquisitionService:
     ) -> dict[str, Any]:
         work = pipeline.get("work") or {}
         decision = pipeline.get("decision") or {}
-        return {
+        result = {
             "schema": RESULT_SCHEMA_ID,
             "intent_id": intent["intent_id"],
             "recording_ref": intent["recording"]["ref"],
@@ -219,3 +261,4 @@ class AcquisitionService:
             },
             "error": error or pipeline.get("error"),
         }
+        return sanitize_acquisition_output(result)

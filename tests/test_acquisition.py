@@ -1,6 +1,10 @@
 from unittest import TestCase
 
-from iwantit.acquisition import AcquisitionContractError, AcquisitionService
+from iwantit.acquisition import (
+    AcquisitionContractError,
+    AcquisitionService,
+    sanitize_acquisition_output,
+)
 from iwantit.cli import build_parser
 
 
@@ -91,8 +95,55 @@ class AcquisitionTests(TestCase):
     def test_invalid_intent_fails_closed(self) -> None:
         payload = intent()
         payload["desired"]["formats"] = []
-        with self.assertRaisesRegex(AcquisitionContractError, "too short"):
+        with self.assertRaisesRegex(AcquisitionContractError, "desired.formats"):
             AcquisitionService({}, {}).handle(payload)
+
+    def test_result_redacts_provider_access_material_recursively(self) -> None:
+        def runner(_data, _dry_run, _confirm, _choice):  # noqa: ANN001
+            return {
+                "run_id": "run-secret",
+                "work": {
+                    "candidates": [
+                        {
+                            "title": "Track",
+                            "download_url": "http://provider/download?link=secret&safe=yes",
+                            "_raw": {
+                                "downloadUrl": "http://provider/raw?apikey=secret",
+                                "infoUrl": "https://catalog/item?id=42&token=secret",
+                                "authorization": "Bearer secret",
+                            },
+                        }
+                    ]
+                },
+                "search": {
+                    "provider": {
+                        "results": [
+                            {
+                                "download_url": "https://provider/file?signature=secret",
+                                "cookie": "session=secret",
+                            }
+                        ]
+                    }
+                },
+                "decision": {"status": "needs_choice"},
+            }
+
+        result = AcquisitionService({}, {}, runner=runner).handle(intent())
+
+        candidate = result["candidates"][0]
+        self.assertEqual(candidate["download_url"], "http://provider/download")
+        self.assertEqual(candidate["_raw"]["downloadUrl"], "http://provider/raw")
+        self.assertEqual(candidate["_raw"]["infoUrl"], "https://catalog/item?id=42")
+        self.assertEqual(candidate["_raw"]["authorization"], "***")
+        search_result = result["provenance"]["search"]["provider"]["results"][0]
+        self.assertEqual(search_result["download_url"], "https://provider/file")
+        self.assertEqual(search_result["cookie"], "***")
+
+    def test_sanitizer_does_not_mutate_pipeline_payload(self) -> None:
+        payload = {"download_url": "https://provider/file?link=secret"}
+        sanitized = sanitize_acquisition_output(payload)
+        self.assertEqual(payload["download_url"], "https://provider/file?link=secret")
+        self.assertEqual(sanitized["download_url"], "https://provider/file")
 
     def test_cli_exposes_stdin_preview_and_explicit_confirmation(self) -> None:
         parser = build_parser()
