@@ -28,10 +28,16 @@ goodreads:
     required: true
     sources:
       ebook:
+        - type: calibre_ssh
+          host: root@192.168.1.222
+          database: /mnt/user/visualmedia/Calibre/metadata.db
         - type: ssh
           host: root@192.168.1.222
           path: /mnt/user/visualmedia
       audiobook:
+        - type: audiobookshelf_ssh
+          host: root@192.168.1.222
+          database: /mnt/user/appdata/audiobookshelf/config/absdatabase.sqlite
         - type: ssh
           host: root@192.168.1.222
           path: /mnt/user/audiobooks
@@ -41,10 +47,12 @@ With `state_path: null`, state is stored in
 `~/.local/state/iwantit/goodreads-shelf.sqlite3`. The database and its parent
 directory are created with private permissions.
 
-Before any search or grab, IWantIt reads both configured library inventories over
-passwordless, batch-mode SSH. A title/author or ISBN match marks that format `owned`.
-Inventory is required by default: if either remote path cannot be read, acquisition
-stops instead of risking duplicate downloads.
+Before any search or grab, IWantIt reads the Calibre/CWA and Audiobookshelf catalogs
+using read-only SQLite queries over passwordless, batch-mode SSH. It also scans both
+media paths as a fallback for files not yet imported by either application. A
+title/author or ISBN match marks that format `owned`. Inventory is required by
+default: if a configured catalog or remote path cannot be read, acquisition stops
+instead of risking duplicate downloads.
 
 ## Initial import
 

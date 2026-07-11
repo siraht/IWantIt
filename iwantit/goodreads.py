@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 import math
 import os
 import re
@@ -45,12 +46,22 @@ DEFAULT_GOODREADS_SETTINGS: dict[str, Any] = {
         "sources": {
             "ebook": [
                 {
+                    "type": "calibre_ssh",
+                    "host": "root@192.168.1.222",
+                    "database": "/mnt/user/visualmedia/Calibre/metadata.db",
+                },
+                {
                     "type": "ssh",
                     "host": "root@192.168.1.222",
                     "path": "/mnt/user/visualmedia",
                 },
             ],
             "audiobook": [
+                {
+                    "type": "audiobookshelf_ssh",
+                    "host": "root@192.168.1.222",
+                    "database": "/mnt/user/appdata/audiobookshelf/config/absdatabase.sqlite",
+                },
                 {
                     "type": "ssh",
                     "host": "root@192.168.1.222",
@@ -360,6 +371,81 @@ class LibraryInventory:
             raise InventoryError(f"could not read {host}:{path}: {detail}")
         return [line.strip() for line in completed.stdout.splitlines() if line.strip()]
 
+    def _ssh_sqlite_rows(self, source: dict[str, Any], query: str) -> list[dict[str, Any]]:
+        executable = shutil.which("ssh")
+        if not executable:
+            raise InventoryError("ssh is required for remote library inventory")
+        host = _clean(source.get("host"))
+        database = _clean(source.get("database"))
+        if not re.fullmatch(r"[A-Za-z0-9_.@-]+", host):
+            raise InventoryError("SSH inventory host contains unsupported characters")
+        if not database.startswith("/"):
+            raise InventoryError("remote SQLite database path must be absolute")
+        remote_command = (
+            f"sqlite3 -readonly -json {shlex.quote(database)} {shlex.quote(query)}"
+        )
+        completed = subprocess.run(
+            [
+                executable,
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=10",
+                host,
+                remote_command,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=float(self.section.get("timeout", 120)),
+            check=False,
+        )
+        if completed.returncode != 0:
+            message = completed.stderr.strip().splitlines()
+            detail = message[-1] if message else "remote SQLite inventory unavailable"
+            raise InventoryError(f"could not query {host}:{database}: {detail}")
+        try:
+            rows = json.loads(completed.stdout or "[]")
+        except json.JSONDecodeError as exc:
+            raise InventoryError("remote SQLite inventory returned invalid JSON") from exc
+        if not isinstance(rows, list):
+            raise InventoryError("remote SQLite inventory returned an unexpected result")
+        return [row for row in rows if isinstance(row, dict)]
+
+    def _calibre_entries(self, source: dict[str, Any]) -> list[str]:
+        query = """
+            SELECT b.title AS title,
+                   COALESCE(GROUP_CONCAT(a.name, ' '), b.author_sort, '') AS author,
+                   COALESCE(
+                     (SELECT val FROM identifiers
+                      WHERE book = b.id AND LOWER(type) = 'isbn' LIMIT 1),
+                     b.isbn, ''
+                   ) AS isbn
+            FROM books b
+            LEFT JOIN books_authors_link bal ON bal.book = b.id
+            LEFT JOIN authors a ON a.id = bal.author
+            GROUP BY b.id
+        """
+        return [
+            " ".join((_clean(row.get("author")), _clean(row.get("title")), _clean(row.get("isbn"))))
+            for row in self._ssh_sqlite_rows(source, query)
+        ]
+
+    def _audiobookshelf_entries(self, source: dict[str, Any]) -> list[str]:
+        query = """
+            SELECT COALESCE(li.title, b.title, '') AS title,
+                   COALESCE(li.authorNamesFirstLast, li.authorNamesLastFirst, '') AS author,
+                   COALESCE(b.isbn, '') AS isbn
+            FROM libraryItems li
+            JOIN books b ON b.id = li.mediaId
+            WHERE li.mediaType = 'book'
+              AND COALESCE(li.isMissing, 0) = 0
+              AND COALESCE(li.isInvalid, 0) = 0
+        """
+        return [
+            " ".join((_clean(row.get("author")), _clean(row.get("title")), _clean(row.get("isbn"))))
+            for row in self._ssh_sqlite_rows(source, query)
+        ]
+
     def entries(self, book_format: str) -> list[str]:
         sources = (self.section.get("sources") or {}).get(book_format) or []
         if not sources:
@@ -375,6 +461,10 @@ class LibraryInventory:
                 entries.extend(self._smb_entries(source))
             elif source_type == "ssh":
                 entries.extend(self._ssh_entries(source))
+            elif source_type == "calibre_ssh":
+                entries.extend(self._calibre_entries(source))
+            elif source_type == "audiobookshelf_ssh":
+                entries.extend(self._audiobookshelf_entries(source))
             else:
                 raise InventoryError(f"unsupported inventory source type: {source_type}")
         return entries

@@ -179,8 +179,12 @@ goodreads:
   inventory:
     required: true
     sources:
-      ebook: [{type: ssh, host: root@192.168.1.222, path: /mnt/user/visualmedia}]
-      audiobook: [{type: ssh, host: root@192.168.1.222, path: /mnt/user/audiobooks}]
+      ebook:
+        - {type: calibre_ssh, host: root@192.168.1.222, database: /mnt/user/visualmedia/Calibre/metadata.db}
+        - {type: ssh, host: root@192.168.1.222, path: /mnt/user/visualmedia}
+      audiobook:
+        - {type: audiobookshelf_ssh, host: root@192.168.1.222, database: /mnt/user/appdata/audiobookshelf/config/absdatabase.sqlite}
+        - {type: ssh, host: root@192.168.1.222, path: /mnt/user/audiobooks}
 ```
 
 ## How it works (mental model)

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
+from unittest.mock import patch
 
 from iwantit.cli import build_parser
 from iwantit.goodreads import (
@@ -129,6 +130,34 @@ class LibraryInventoryTests(TestCase):
                 ShelfBook("2", "A Different Book", "Another Author"),
             ]
             self.assertEqual(inventory.owned_ids(books, "ebook"), {"1"})
+
+    def test_calibre_catalog_rows_are_matchable_inventory_entries(self) -> None:
+        inventory = LibraryInventory({})
+        with patch.object(
+            inventory,
+            "_ssh_sqlite_rows",
+            return_value=[
+                {"title": "Kindred", "author": "Octavia E. Butler", "isbn": "9780807083697"}
+            ],
+        ):
+            entries = inventory._calibre_entries({})
+        self.assertEqual(len(entries), 1)
+        self.assertTrue(
+            any("9780807083697" in entry and "Octavia E. Butler" in entry for entry in entries)
+        )
+
+    def test_audiobookshelf_catalog_rows_are_matchable_inventory_entries(self) -> None:
+        inventory = LibraryInventory({})
+        with patch.object(
+            inventory,
+            "_ssh_sqlite_rows",
+            return_value=[
+                {"title": "The Left Hand of Darkness", "author": "Ursula K. Le Guin", "isbn": ""}
+            ],
+        ):
+            entries = inventory._audiobookshelf_entries({})
+        self.assertEqual(len(entries), 1)
+        self.assertIn("Ursula K. Le Guin", entries[0])
 
 
 class GoodreadsShelfServiceTests(TestCase):
