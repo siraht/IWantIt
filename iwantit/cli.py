@@ -21,6 +21,7 @@ from .config import (
     validate_config,
 )
 from .goodreads import GoodreadsError, GoodreadsShelfService, configured_formats
+from .catalogs import BookIdentity, CatalogError, LibraryCatalogService
 from .registry import provider_required_keys
 from .step_metadata import STEP_METADATA
 from .pipeline import Context, run_workflow
@@ -969,6 +970,52 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 1 if errors else 0
 
 
+def cmd_catalog_list(args: argparse.Namespace) -> int:
+    service = LibraryCatalogService.from_config(load_config(ensure_config_exists(args.config)))
+    write_json([
+        {"name": item.name, "adapter": item.adapter_type,
+         "media_types": list(item.media_types), "required": item.required}
+        for item in service.adapters
+    ])
+    return 0
+
+
+def cmd_catalog_doctor(args: argparse.Namespace) -> int:
+    health = LibraryCatalogService.from_config(
+        load_config(ensure_config_exists(args.config))
+    ).health()
+    write_json([item.__dict__ for item in health])
+    return 1 if any(not item.ok and item.required for item in health) else 0
+
+
+def cmd_catalog_match(args: argparse.Namespace) -> int:
+    config = load_config(ensure_config_exists(args.config))
+    identifiers = {
+        key: value
+        for key, value in {"isbn": args.isbn, "asin": args.asin}.items()
+        if value
+    }
+    result = LibraryCatalogService.from_config(config).match(
+        BookIdentity(args.title, tuple(args.author or []), identifiers), args.media_type
+    )
+    write_json(result.__dict__)
+    return 0 if result.owned else 1
+
+
+def cmd_catalog_owned(args: argparse.Namespace) -> int:
+    books = LibraryCatalogService.from_config(
+        load_config(ensure_config_exists(args.config))
+    ).books(args.media_type)
+    if args.full:
+        write_json([book.__dict__ for book in books])
+    else:
+        counts: dict[str, int] = {}
+        for book in books:
+            counts[book.catalog] = counts.get(book.catalog, 0) + 1
+        write_json({"media_type": args.media_type, "total": len(books), "catalogs": counts})
+    return 0
+
+
 def _check_service(name: str, url: str, headers: dict[str, str] | None, timeout: float = 5.0) -> tuple[bool, str]:
     try:
         response = requests.get(url, headers=headers, timeout=timeout)
@@ -1012,6 +1059,17 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         ok, msg = _check_service("redacted", url, {"Authorization": redacted["api_key"]})
         sys.stderr.write(msg + "\n")
         failed = failed or not ok
+
+    try:
+        catalog_health = LibraryCatalogService.from_config(config).health()
+    except CatalogError as exc:
+        sys.stderr.write(f"library catalogs error: {exc}\n")
+        failed = True
+    else:
+        for health in catalog_health:
+            count = f" ({health.item_count} items)" if health.item_count is not None else ""
+            sys.stderr.write(f"library catalog {health.name}: {health.message}{count}\n")
+            failed = failed or (health.required and not health.ok)
 
     web = config.get("web_search", {}) or {}
     provider = web.get("provider")
@@ -1327,6 +1385,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--confirm", action="store_true", help="Required approval for the selected Prowlarr grab"
     )
     shelf_resolve.set_defaults(func=cmd_shelf_resolve)
+
+    catalog_cmd = sub.add_parser("catalog", help="Inspect reusable owned-library catalogs")
+    catalog_sub = catalog_cmd.add_subparsers(dest="catalog_command", required=True)
+    catalog_list = catalog_sub.add_parser("list", parents=[common], help="List configured catalogs")
+    catalog_list.set_defaults(func=cmd_catalog_list)
+    catalog_doctor = catalog_sub.add_parser("doctor", parents=[common], help="Check catalog connectivity and schemas")
+    catalog_doctor.set_defaults(func=cmd_catalog_doctor)
+    catalog_owned = catalog_sub.add_parser("owned", parents=[common], help="Count cataloged books")
+    catalog_owned.add_argument("--media-type", choices=["ebook", "audiobook"], required=True)
+    catalog_owned.set_defaults(func=cmd_catalog_owned)
+    catalog_match = catalog_sub.add_parser("match", parents=[common], help="Check whether a book is owned")
+    catalog_match.add_argument("--title", required=True)
+    catalog_match.add_argument("--author", action="append")
+    catalog_match.add_argument("--isbn")
+    catalog_match.add_argument("--asin")
+    catalog_match.add_argument("--media-type", choices=["ebook", "audiobook"], required=True)
+    catalog_match.set_defaults(func=cmd_catalog_match)
 
     choose_group = argparse.ArgumentParser(add_help=False)
     choose_source = choose_group.add_mutually_exclusive_group()

@@ -10,11 +10,11 @@ contain reviews and private notes.
 
 ## Configuration
 
-The default config contains this shelf:
+Configure a shelf in your private config:
 
 ```yaml
 goodreads:
-  shelf_url: https://www.goodreads.com/review/list/151049665-travis?shelf=to-read
+  shelf_url: https://www.goodreads.com/review/list/YOUR_ID?shelf=to-read
   shelf: to-read
   formats: [ebook, audiobook]
   batch_limit: 10
@@ -23,36 +23,16 @@ goodreads:
   retry_base_seconds: 21600
   retry_max_seconds: 604800
   state_path: null
-  inventory:
-    enabled: true
-    required: true
-    sources:
-      ebook:
-        - type: calibre_ssh
-          host: root@192.168.1.222
-          database: /mnt/user/visualmedia/Calibre/metadata.db
-        - type: ssh
-          host: root@192.168.1.222
-          path: /mnt/user/visualmedia
-      audiobook:
-        - type: audiobookshelf_ssh
-          host: root@192.168.1.222
-          database: /mnt/user/appdata/audiobookshelf/config/absdatabase.sqlite
-        - type: ssh
-          host: root@192.168.1.222
-          path: /mnt/user/audiobooks
 ```
 
 With `state_path: null`, state is stored in
 `~/.local/state/iwantit/goodreads-shelf.sqlite3`. The database and its parent
 directory are created with private permissions.
 
-Before any search or grab, IWantIt reads the Calibre/CWA and Audiobookshelf catalogs
-using read-only SQLite queries over passwordless, batch-mode SSH. It also scans both
-media paths as a fallback for files not yet imported by either application. A
-title/author or ISBN match marks that format `owned`. Inventory is required by
-default: if a configured catalog or remote path cannot be read, acquisition stops
-instead of risking duplicate downloads.
+Before any search or grab, the normal book workflow checks the reusable
+`library_catalogs` subsystem. Goodreads does not know about Calibre,
+Calibre-Web-Automated, Audiobookshelf, filesystem layouts, or transports. See
+[Library catalogs](library_catalogs.md) for supported adapters and configuration.
 
 ## Initial import
 

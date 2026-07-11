@@ -15,6 +15,31 @@ def config_schema() -> dict[str, Any]:
             "pre_steps": {"type": "array", "items": {"type": "string"}},
             "acquisition": {"type": "object", "additionalProperties": True},
             "goodreads": {"type": "object", "additionalProperties": True},
+            "library_catalogs": {
+                "type": "object",
+                "additionalProperties": True,
+                "properties": {
+                    "require_coverage": {"type": "boolean"},
+                    "catalogs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": True,
+                            "required": ["name", "adapter"],
+                            "properties": {
+                                "name": {"type": "string", "minLength": 1},
+                                "adapter": {"type": "string", "minLength": 1},
+                                "enabled": {"type": "boolean"},
+                                "required": {"type": "boolean"},
+                                "media_types": {
+                                    "type": "array",
+                                    "items": {"enum": ["ebook", "audiobook"]},
+                                },
+                            },
+                        },
+                    },
+                },
+            },
             "default_workflow": {"type": "string"},
             "workflows": {
                 "type": "array",

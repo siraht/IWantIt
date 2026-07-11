@@ -425,7 +425,7 @@ def run_workflow(
             data.setdefault("decision", {})["status"] = "error"
             return data
         decision = data.get("decision", {})
-        if decision.get("status") == "needs_choice":
+        if decision.get("status") in {"needs_choice", "owned"}:
             break
         if end_step and step_name == end_step:
             break

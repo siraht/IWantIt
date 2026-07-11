@@ -3781,7 +3781,47 @@ def store_tags(data: dict[str, Any], step_cfg: dict[str, Any], context: Context)
     return data
 
 
+def filter_owned(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> dict[str, Any]:
+    """Stop a book acquisition when a configured library catalog already owns it."""
+    work = data.get("work") or {}
+    if work.get("media_type") != "book":
+        return data
+    from ..catalogs import BookIdentity, LibraryCatalogService
+
+    preferences = (data.get("request") or {}).get("preferences") or {}
+    book_format = str(preferences.get("book_format") or "ebook").casefold()
+    formats = ("ebook", "audiobook") if book_format == "both" else (book_format,)
+    service = LibraryCatalogService.from_config(context.config)
+    if not service.adapters:
+        return data
+    identifiers = {
+        key: work.get(key)
+        for key in ("isbn", "isbn13", "asin")
+        if work.get(key)
+    }
+    wanted = BookIdentity(
+        str(work.get("title") or ""),
+        (str(work.get("author") or ""),),
+        identifiers,
+    )
+    matches = {kind: service.match(wanted, kind) for kind in formats}
+    data["ownership"] = {
+        kind: {
+            "owned": match.owned,
+            "catalog": match.catalog,
+            "item_id": match.item_id,
+            "reason": match.reason,
+            "score": match.score,
+        }
+        for kind, match in matches.items()
+    }
+    if matches and all(match.owned for match in matches.values()):
+        data.setdefault("decision", {})["status"] = "owned"
+    return data
+
+
 BUILTINS = {
+    "filter_owned": filter_owned,
     "identify": identify,
     "identify_web_search": identify_web_search,
     "determine_media_type": determine_media_type,

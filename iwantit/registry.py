@@ -115,6 +115,23 @@ def builtin_provider_registry() -> dict[str, dict[str, Any]]:
 
 def merge_provider_registry(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
     registry = dict(builtin_provider_registry())
+    for catalog in (config.get("library_catalogs") or {}).get("catalogs") or []:
+        if not isinstance(catalog, dict) or not catalog.get("name"):
+            continue
+        registry[f"library_catalog.{catalog['name']}"] = {
+            "type": "library_catalog",
+            "name": catalog["name"],
+            "implementation": catalog.get("adapter"),
+            "media_types": catalog.get("media_types", ["ebook"]),
+            "required_keys": [],
+            "capabilities": {"ownership_lookup": True, "health": True},
+            "data_handling": {
+                "classification": "local_private",
+                "persistence": "none",
+                "community_publish_allowed": False,
+                "remote_inference_allowed": False,
+            },
+        }
     custom = config.get("provider_registry")
     if isinstance(custom, dict):
         for key, value in custom.items():
@@ -153,6 +170,9 @@ def iter_active_providers(config: dict[str, Any]) -> list[str]:
             active.append("radarr")
         if arr.get("sonarr"):
             active.append("sonarr")
+    for catalog in (config.get("library_catalogs") or {}).get("catalogs") or []:
+        if isinstance(catalog, dict) and catalog.get("name") and catalog.get("enabled", True):
+            active.append(f"library_catalog.{catalog['name']}")
     return active
 
 

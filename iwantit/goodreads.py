@@ -4,15 +4,8 @@ from __future__ import annotations
 
 import csv
 import hashlib
-import json
-import math
-import os
-import re
-import shlex
-import shutil
 import sqlite3
 import subprocess
-import unicodedata
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -25,12 +18,13 @@ import requests
 
 from .paths import state_dir
 from .pipeline import run_workflow
+from .catalogs import BookIdentity, CatalogError, LibraryCatalogService
 
 
 GOODREADS_SOURCE = "goodreads"
 SUPPORTED_FORMATS = ("ebook", "audiobook")
 DEFAULT_GOODREADS_SETTINGS: dict[str, Any] = {
-    "shelf_url": "https://www.goodreads.com/review/list/151049665-travis?shelf=to-read",
+    "shelf_url": None,
     "shelf": "to-read",
     "formats": ["ebook", "audiobook"],
     "batch_limit": 10,
@@ -39,46 +33,11 @@ DEFAULT_GOODREADS_SETTINGS: dict[str, Any] = {
     "retry_base_seconds": 21600,
     "retry_max_seconds": 604800,
     "state_path": None,
-    "inventory": {
-        "enabled": True,
-        "required": True,
-        "timeout": 120,
-        "sources": {
-            "ebook": [
-                {
-                    "type": "calibre_ssh",
-                    "host": "root@192.168.1.222",
-                    "database": "/mnt/user/visualmedia/Calibre/metadata.db",
-                },
-                {
-                    "type": "ssh",
-                    "host": "root@192.168.1.222",
-                    "path": "/mnt/user/visualmedia",
-                },
-            ],
-            "audiobook": [
-                {
-                    "type": "audiobookshelf_ssh",
-                    "host": "root@192.168.1.222",
-                    "database": "/mnt/user/appdata/audiobookshelf/config/absdatabase.sqlite",
-                },
-                {
-                    "type": "ssh",
-                    "host": "root@192.168.1.222",
-                    "path": "/mnt/user/audiobooks",
-                },
-            ],
-        },
-    },
 }
 
 
 class GoodreadsError(ValueError):
     """The supplied Goodreads source could not be consumed safely."""
-
-
-class InventoryError(RuntimeError):
-    """Existing-library inventory could not be read safely."""
 
 
 @dataclass(frozen=True)
@@ -231,251 +190,6 @@ def parse_goodreads_rss(content: bytes | str) -> list[ShelfBook]:
     if not books and root.tag.rsplit("}", 1)[-1].casefold() not in {"rss", "feed"}:
         raise GoodreadsError("Goodreads response was not an RSS feed")
     return books
-
-
-_MATCH_STOPWORDS = {
-    "a",
-    "an",
-    "and",
-    "book",
-    "edition",
-    "for",
-    "in",
-    "of",
-    "on",
-    "the",
-    "to",
-    "with",
-}
-
-
-def _normalized_tokens(value: str) -> list[str]:
-    ascii_value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
-    return re.findall(r"[a-z0-9]+", ascii_value.casefold())
-
-
-def _book_matches_path(book: ShelfBook, path: str) -> bool:
-    path_tokens = set(_normalized_tokens(path))
-    path_digits = "".join(character for character in path if character.isdigit())
-    for identifier in (book.isbn13, book.isbn):
-        digits = "".join(character for character in identifier if character.isdigit())
-        if len(digits) >= 10 and digits in path_digits:
-            return True
-
-    author_tokens = _normalized_tokens(book.author)
-    if not author_tokens:
-        return False
-    author_markers = {author_tokens[-1]}
-    if len(author_tokens) > 1:
-        author_markers.add(author_tokens[0])
-    if not author_markers.intersection(path_tokens):
-        return False
-
-    title_head = re.split(r"[:(\[]", book.title, maxsplit=1)[0]
-    title_tokens = [
-        token for token in _normalized_tokens(title_head) if token not in _MATCH_STOPWORDS
-    ]
-    if not title_tokens:
-        title_tokens = _normalized_tokens(book.title)
-    overlap = sum(token in path_tokens for token in title_tokens)
-    required = 1 if len(title_tokens) == 1 else max(2, math.ceil(len(title_tokens) * 0.7))
-    return overlap >= required
-
-
-class LibraryInventory:
-    """Read-only local/SMB inventory used to suppress duplicate acquisition."""
-
-    def __init__(self, section: dict[str, Any]) -> None:
-        self.section = section
-
-    def _local_entries(self, source: dict[str, Any]) -> list[str]:
-        path = Path(_clean(source.get("path"))).expanduser()
-        if not path.is_dir():
-            raise InventoryError(f"library inventory path is unavailable: {path}")
-        entries: list[str] = []
-        for root, directories, files in os.walk(path):
-            relative_root = str(Path(root).relative_to(path))
-            entries.extend(str(Path(relative_root) / name) for name in directories)
-            entries.extend(str(Path(relative_root) / name) for name in files)
-        return entries
-
-    def _smb_entries(self, source: dict[str, Any]) -> list[str]:
-        executable = shutil.which("smbclient")
-        if not executable:
-            raise InventoryError("smbclient is required for SMB library inventory")
-        share = _clean(source.get("share"))
-        if not share.startswith("//"):
-            raise InventoryError("SMB inventory source requires a //server/share path")
-        command = [executable, share, "-g"]
-        credentials_file = _clean(source.get("credentials_file"))
-        if credentials_file:
-            credentials_path = Path(credentials_file).expanduser()
-            if not credentials_path.is_file():
-                raise InventoryError("configured SMB credentials file does not exist")
-            command.extend(["-A", str(credentials_path)])
-        else:
-            command.append("-N")
-        command.extend(["-c", "recurse;ls"])
-        completed = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=float(self.section.get("timeout", 120)),
-            check=False,
-        )
-        if completed.returncode != 0:
-            message = completed.stderr.strip().splitlines()
-            detail = message[-1] if message else "SMB share unavailable"
-            raise InventoryError(f"could not read {share}: {detail}")
-        entries: list[str] = []
-        for line in completed.stdout.splitlines():
-            parts = line.split("|")
-            if len(parts) >= 2 and parts[0] in {"D", "F"}:
-                value = _clean(parts[-1])
-                if value not in {"", ".", ".."}:
-                    entries.append(value)
-        return entries
-
-    def _ssh_entries(self, source: dict[str, Any]) -> list[str]:
-        executable = shutil.which("ssh")
-        if not executable:
-            raise InventoryError("ssh is required for remote library inventory")
-        host = _clean(source.get("host"))
-        path = _clean(source.get("path"))
-        if not re.fullmatch(r"[A-Za-z0-9_.@-]+", host):
-            raise InventoryError("SSH inventory host contains unsupported characters")
-        if not path.startswith("/"):
-            raise InventoryError("SSH inventory path must be absolute")
-        remote_command = (
-            f"find -- {shlex.quote(path)} -mindepth 1 "
-            "-printf '%P\\n'"
-        )
-        completed = subprocess.run(
-            [
-                executable,
-                "-o",
-                "BatchMode=yes",
-                "-o",
-                "ConnectTimeout=10",
-                host,
-                remote_command,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=float(self.section.get("timeout", 120)),
-            check=False,
-        )
-        if completed.returncode != 0:
-            message = completed.stderr.strip().splitlines()
-            detail = message[-1] if message else "SSH inventory unavailable"
-            raise InventoryError(f"could not read {host}:{path}: {detail}")
-        return [line.strip() for line in completed.stdout.splitlines() if line.strip()]
-
-    def _ssh_sqlite_rows(self, source: dict[str, Any], query: str) -> list[dict[str, Any]]:
-        executable = shutil.which("ssh")
-        if not executable:
-            raise InventoryError("ssh is required for remote library inventory")
-        host = _clean(source.get("host"))
-        database = _clean(source.get("database"))
-        if not re.fullmatch(r"[A-Za-z0-9_.@-]+", host):
-            raise InventoryError("SSH inventory host contains unsupported characters")
-        if not database.startswith("/"):
-            raise InventoryError("remote SQLite database path must be absolute")
-        remote_command = (
-            f"sqlite3 -readonly -json {shlex.quote(database)} {shlex.quote(query)}"
-        )
-        completed = subprocess.run(
-            [
-                executable,
-                "-o",
-                "BatchMode=yes",
-                "-o",
-                "ConnectTimeout=10",
-                host,
-                remote_command,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=float(self.section.get("timeout", 120)),
-            check=False,
-        )
-        if completed.returncode != 0:
-            message = completed.stderr.strip().splitlines()
-            detail = message[-1] if message else "remote SQLite inventory unavailable"
-            raise InventoryError(f"could not query {host}:{database}: {detail}")
-        try:
-            rows = json.loads(completed.stdout or "[]")
-        except json.JSONDecodeError as exc:
-            raise InventoryError("remote SQLite inventory returned invalid JSON") from exc
-        if not isinstance(rows, list):
-            raise InventoryError("remote SQLite inventory returned an unexpected result")
-        return [row for row in rows if isinstance(row, dict)]
-
-    def _calibre_entries(self, source: dict[str, Any]) -> list[str]:
-        query = """
-            SELECT b.title AS title,
-                   COALESCE(GROUP_CONCAT(a.name, ' '), b.author_sort, '') AS author,
-                   COALESCE(
-                     (SELECT val FROM identifiers
-                      WHERE book = b.id AND LOWER(type) = 'isbn' LIMIT 1),
-                     b.isbn, ''
-                   ) AS isbn
-            FROM books b
-            LEFT JOIN books_authors_link bal ON bal.book = b.id
-            LEFT JOIN authors a ON a.id = bal.author
-            GROUP BY b.id
-        """
-        return [
-            " ".join((_clean(row.get("author")), _clean(row.get("title")), _clean(row.get("isbn"))))
-            for row in self._ssh_sqlite_rows(source, query)
-        ]
-
-    def _audiobookshelf_entries(self, source: dict[str, Any]) -> list[str]:
-        query = """
-            SELECT COALESCE(li.title, b.title, '') AS title,
-                   COALESCE(li.authorNamesFirstLast, li.authorNamesLastFirst, '') AS author,
-                   COALESCE(b.isbn, '') AS isbn
-            FROM libraryItems li
-            JOIN books b ON b.id = li.mediaId
-            WHERE li.mediaType = 'book'
-              AND COALESCE(li.isMissing, 0) = 0
-              AND COALESCE(li.isInvalid, 0) = 0
-        """
-        return [
-            " ".join((_clean(row.get("author")), _clean(row.get("title")), _clean(row.get("isbn"))))
-            for row in self._ssh_sqlite_rows(source, query)
-        ]
-
-    def entries(self, book_format: str) -> list[str]:
-        sources = (self.section.get("sources") or {}).get(book_format) or []
-        if not sources:
-            raise InventoryError(f"no inventory source configured for {book_format}")
-        entries: list[str] = []
-        for source in sources:
-            if not isinstance(source, dict):
-                continue
-            source_type = _clean(source.get("type") or "local").casefold()
-            if source_type == "local":
-                entries.extend(self._local_entries(source))
-            elif source_type == "smb":
-                entries.extend(self._smb_entries(source))
-            elif source_type == "ssh":
-                entries.extend(self._ssh_entries(source))
-            elif source_type == "calibre_ssh":
-                entries.extend(self._calibre_entries(source))
-            elif source_type == "audiobookshelf_ssh":
-                entries.extend(self._audiobookshelf_entries(source))
-            else:
-                raise InventoryError(f"unsupported inventory source type: {source_type}")
-        return entries
-
-    def owned_ids(self, books: Iterable[ShelfBook], book_format: str) -> set[str]:
-        entries = self.entries(book_format)
-        owned: set[str] = set()
-        for book in books:
-            if any(_book_matches_path(book, entry) for entry in entries):
-                owned.add(book.item_id)
-        return owned
 
 
 def _utc_sql(value: datetime | None = None) -> str:
@@ -922,6 +636,7 @@ class GoodreadsShelfService:
             Path(path), lease_seconds=int(section.get("lease_seconds", 1800))
         )
         self.runner = runner or self._pipeline_runner
+        self.catalogs = LibraryCatalogService.from_config(config)
 
     @property
     def section(self) -> dict[str, Any]:
@@ -958,7 +673,7 @@ class GoodreadsShelfService:
             data,
             self.builtins,
             workflow_name="book",
-            start_step="prowlarr_search",
+            start_step="filter_owned",
             choice_index=choice,
             dry_run=dry_run,
             confirm=confirm,
@@ -973,25 +688,34 @@ class GoodreadsShelfService:
     def reconcile_inventory(
         self, *, shelf: str, formats: Iterable[str]
     ) -> dict[str, Any]:
-        inventory_section = self.section.get("inventory") or {}
-        if not inventory_section.get("enabled", True):
+        if not self.catalogs.adapters:
             return {"enabled": False, "owned": {}, "errors": {}}
-        inventory = LibraryInventory(inventory_section)
         owned_counts: dict[str, int] = {}
         errors: dict[str, str] = {}
         for book_format in formats:
             books = self.journal.inventory_books(shelf=shelf, book_format=book_format)
             try:
-                owned = inventory.owned_ids(books, book_format)
-            except (InventoryError, OSError, subprocess.SubprocessError) as exc:
+                owned = {
+                    book.item_id
+                    for book in books
+                    if self.catalogs.match(
+                        BookIdentity(
+                            book.title,
+                            (book.author,),
+                            {"isbn": book.isbn, "isbn13": book.isbn13},
+                        ),
+                        book_format,
+                    ).owned
+                }
+            except (CatalogError, OSError, subprocess.SubprocessError) as exc:
                 errors[book_format] = str(exc)
                 continue
             owned_counts[book_format] = self.journal.mark_owned(
                 shelf=shelf, book_format=book_format, item_ids=owned
             )
-        if errors and inventory_section.get("required", True):
+        if errors:
             details = "; ".join(f"{key}: {value}" for key, value in sorted(errors.items()))
-            raise InventoryError(
+            raise CatalogError(
                 "required library inventory failed; acquisition is blocked: " + details
             )
         return {"enabled": True, "owned": owned_counts, "errors": errors}
@@ -1028,6 +752,7 @@ class GoodreadsShelfService:
             "attempted": 0,
             "downloaded": 0,
             "not_found": 0,
+            "owned": 0,
             "needs_choice": 0,
             "error": 0,
             "previewed": 0,
@@ -1094,6 +819,15 @@ class GoodreadsShelfService:
                 run_id=run_id,
             )
             return "downloaded"
+        if decision.get("status") == "owned":
+            self.journal.set_outcome(
+                shelf=shelf,
+                item_id=item["item_id"],
+                book_format=book_format,
+                status="owned",
+                run_id=run_id,
+            )
+            return "owned"
         if decision.get("status") == "needs_choice" and candidates:
             self.journal.set_outcome(
                 shelf=shelf,

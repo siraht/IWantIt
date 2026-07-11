@@ -6,6 +6,12 @@ from typing import Any
 
 
 STEP_METADATA: dict[str, dict[str, Any]] = {
+    "filter_owned": {
+        "side_effect": False,
+        "requires": ["work.title", "work.media_type"],
+        "emits": ["ownership", "decision.status"],
+        "description": "Stop book acquisition when a configured library catalog owns it.",
+    },
     "ocr": {
         "side_effect": False,
         "requires": ["request.image_path"],

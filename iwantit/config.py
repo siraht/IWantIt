@@ -65,6 +65,7 @@ def default_config() -> dict[str, Any]:
                 "name": "book",
                 "match": {"media_type": "book"},
                 "steps": [
+                    "filter_owned",
                     "prowlarr_search",
                     "filter_candidates",
                     "filter_match",
@@ -148,6 +149,7 @@ def default_config() -> dict[str, Any]:
                 "retries": 2,
                 "retry_backoff_seconds": 0.5,
             },
+            "filter_owned": {"builtin": "filter_owned"},
             "filter_candidates": {
                 "builtin": "filter_candidates",
                 "allow_missing_categories": False,
@@ -369,6 +371,10 @@ def default_config() -> dict[str, Any]:
         "book": {
             "default_format": "both",
             "auto_select_each_format": True,
+        },
+        "library_catalogs": {
+            "require_coverage": False,
+            "catalogs": [],
         },
         "goodreads": dict(DEFAULT_GOODREADS_SETTINGS),
         "diagnostics": {
@@ -611,6 +617,22 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
             secrets = yaml.safe_load(handle) or {}
     merged = deep_merge(config, secrets)
     merged = resolve_env_values(merged)
+    # Built-in workflow migrations are in-memory and idempotent so older user
+    # configs gain safety gates without rewriting their private files.
+    steps = dict(merged.get("steps", {}) or {})
+    steps.setdefault("filter_owned", {"builtin": "filter_owned"})
+    merged["steps"] = steps
+    for workflow in merged.get("workflows", []) or []:
+        if workflow.get("name") != "book":
+            continue
+        workflow_steps = list(workflow.get("steps", []) or [])
+        if "filter_owned" not in workflow_steps:
+            try:
+                index = workflow_steps.index("prowlarr_search")
+            except ValueError:
+                index = 0
+            workflow_steps.insert(index, "filter_owned")
+            workflow["steps"] = workflow_steps
     plugin_steps, plugin_meta = discover_plugins(merged, Path.cwd())
     if plugin_steps:
         merged_steps = dict(merged.get("steps", {}) or {})
