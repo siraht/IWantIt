@@ -18,6 +18,9 @@ contract, not a display hint:
 - `provider_payloads_exportable=false` prevents raw provider payload export.
 
 Prowlarr and Redacted are declared `local_private` in the provider registry.
+A separately enabled Jackett or Soulseek/slskd adapter is also declared
+`local_private`. The process-wide `IWANTIT_PRIVATE_ACQUISITION_DISABLED=1` kill
+switch applies to Prowlarr, Jackett, and Soulseek search and dispatch.
 A caller can also request private handling with `policy.private=true`. IWantIt
 uses the stricter classification whenever either condition applies. Candidate
 metadata may still contain provider-confidential information even after access
@@ -47,3 +50,10 @@ Search provenance retains only query, result count, and error type. Dispatch
 provenance retains only provider, status, count, and an opaque returned reference
 when one exists. This is data minimization in addition to credential redaction;
 sanitizing a raw provider payload would not make that payload exportable.
+
+Confirmed dispatch is keyed by `intent_id` plus a fingerprint of the recording,
+desired version/format, policy, and selected candidate. Its local SQLite journal
+prevents duplicate provider actions across retries and process restarts. Reusing
+an intent id for different acquisition coordinates is rejected. Failed attempts
+remain retryable; completed sanitized results are replayed without another
+provider call.
