@@ -14,6 +14,8 @@ from iwantit.private_adapters import (
     validate_private_endpoint,
 )
 from iwantit.registry import iter_active_providers, validate_registry_requirements
+from iwantit.pipeline import Context
+from iwantit.steps.builtin import BUILTINS, dedupe_candidates, filter_candidates
 
 
 class FakeResponse:
@@ -162,3 +164,154 @@ class SoulseekAdapterTests(TestCase):
             adapter.cancel_transfer("peer/name", "transfer-id")
         self.assertEqual(first["id"], second["id"])
         self.assertIn("peer%2Fname", request.call_args.args[1])
+
+
+class PrivateAdapterWorkflowTests(TestCase):
+    def workflow_config(self) -> dict:
+        return {
+            "pre_steps": [],
+            "workflows": [
+                {
+                    "name": "music",
+                    "match": {"media_type": "music"},
+                    "steps": [
+                        "jackett_search",
+                        "filter_by_version",
+                        "decide",
+                        "private_source_dispatch",
+                    ],
+                }
+            ],
+            "steps": {
+                "jackett_search": {"builtin": "jackett_search"},
+                "filter_by_version": {"builtin": "filter_by_version"},
+                "decide": {"builtin": "decide", "auto_select": True},
+                "private_source_dispatch": {
+                    "builtin": "private_source_dispatch",
+                    "side_effect": True,
+                },
+            },
+            **jackett_config(),
+        }
+
+    @staticmethod
+    def candidate() -> dict:
+        return {
+            "title": "Artist - Track (Extended Mix) FLAC WEB",
+            "provider": "jackett",
+            "size": 123,
+            "_private": {"provider": "jackett", "download_url": "http://local/download"},
+        }
+
+    def test_preview_runs_search_and_version_filter_but_never_dispatches(self) -> None:
+        service = AcquisitionService(self.workflow_config(), BUILTINS)
+        payload = {
+            "schema": "iwantit.acquisition-intent/1",
+            "intent_id": "preview-1",
+            "action": "preview",
+            "recording": {
+                "ref": "err:recording:1",
+                "artist": "Artist",
+                "title": "Track",
+                "version": "Extended Mix",
+            },
+            "desired": {"formats": ["FLAC"], "media": ["WEB"], "exact_version": True},
+        }
+        with (
+            patch.object(JackettAdapter, "search", return_value=[self.candidate()]),
+            patch.object(JackettAdapter, "dispatch") as dispatch,
+        ):
+            result = service.handle(payload)
+        dispatch.assert_not_called()
+        self.assertEqual(result["status"], "selected")
+        self.assertFalse(result["side_effects_allowed"])
+        self.assertEqual(result["dispatch"]["jackett"]["status"], "dry_run")
+
+    def test_confirmed_dispatch_routes_only_the_selected_provider(self) -> None:
+        service = AcquisitionService(self.workflow_config(), BUILTINS)
+        payload = {
+            "schema": "iwantit.acquisition-intent/1",
+            "intent_id": "dispatch-1",
+            "action": "dispatch",
+            "recording": {
+                "ref": "err:recording:1",
+                "artist": "Artist",
+                "title": "Track",
+                "version": "Extended Mix",
+            },
+            "desired": {"formats": ["FLAC"], "media": ["WEB"], "exact_version": True},
+            "confirmation": {"approved": True, "selected_candidate_index": 0},
+        }
+        with (
+            patch.object(JackettAdapter, "search", return_value=[self.candidate()]),
+            patch.object(
+                JackettAdapter,
+                "dispatch",
+                return_value={"status": "ok", "count": 1, "id": "opaque"},
+            ) as dispatch,
+        ):
+            result = service.handle(payload)
+        dispatch.assert_called_once()
+        self.assertEqual(result["status"], "dispatched")
+        self.assertTrue(result["side_effects_allowed"])
+        self.assertEqual(result["dispatch"]["jackett"]["reference"], "opaque")
+
+    def test_exact_version_mismatch_does_not_silently_substitute(self) -> None:
+        config = self.workflow_config()
+        service = AcquisitionService(config, BUILTINS)
+        payload = {
+            "schema": "iwantit.acquisition-intent/1",
+            "intent_id": "mismatch-1",
+            "action": "preview",
+            "recording": {
+                "ref": "err:recording:1",
+                "artist": "Artist",
+                "title": "Track",
+                "version": "Dub Mix",
+            },
+            "desired": {"formats": ["FLAC"], "media": ["WEB"], "exact_version": True},
+        }
+        with patch.object(JackettAdapter, "search", return_value=[self.candidate()]):
+            result = service.handle(payload)
+        self.assertNotEqual(result["status"], "dispatched")
+        self.assertFalse(result["side_effects_allowed"])
+        self.assertEqual(result["candidates"], [])
+
+    def test_prowlarr_category_filter_retains_other_adapter_observations(self) -> None:
+        data = {
+            "request": {"media_type": "music"},
+            "work": {
+                "media_type": "music",
+                "candidates": [
+                    {"title": "Jackett result", "provider": "jackett"},
+                    {"title": "Soulseek result", "provider": "soulseek"},
+                    {"title": "Prowlarr result", "provider": "prowlarr"},
+                ],
+            },
+        }
+        context = Context(
+            config={"prowlarr": {"search": {"categories": {"music": [3000]}}}},
+            state_path="/tmp",
+        )
+        result = filter_candidates(data, {"allow_missing_categories": False}, context)
+        self.assertEqual(
+            [item["provider"] for item in result["work"]["candidates"]],
+            ["jackett", "soulseek"],
+        )
+
+    def test_dedupe_does_not_merge_private_coordinates_across_providers(self) -> None:
+        candidates = [
+            {
+                "title": "Artist - Track.flac",
+                "provider": "jackett",
+                "_private": {"download_url": "secret-one"},
+            },
+            {
+                "title": "Artist - Track.flac",
+                "provider": "soulseek",
+                "_private": {"username": "secret-two"},
+            },
+        ]
+        data = {"request": {"media_type": "music"}, "work": {"candidates": candidates}}
+        result = dedupe_candidates(data, {}, Context(config={}, state_path="/tmp"))
+        self.assertEqual(len(result["work"]["candidates"]), 2)

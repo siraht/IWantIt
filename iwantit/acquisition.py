@@ -208,8 +208,12 @@ class AcquisitionService:
                 "release_preferences": {
                     "formats": list(desired["formats"]),
                     "media": list(desired.get("media", [])),
+                    "editions": (
+                        [str(recording["version"])] if recording.get("version") else []
+                    ),
                 },
                 "explicit_version": bool(desired["exact_version"]),
+                "allow_substitution": bool(desired.get("allow_substitution", False)),
             },
             "work": {
                 "media_type": "music",

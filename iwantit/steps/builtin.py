@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html as html_lib
+import hashlib
 import json
 import re
 import subprocess
@@ -16,6 +17,13 @@ import requests
 
 from ..canonical import canonical_schema, merge_from_work, set_field
 from ..pipeline import Context, render_template
+from ..private_adapters import (
+    AdapterContractError,
+    AdapterPolicyError,
+    JackettAdapter,
+    SoulseekAdapter,
+    connector_enabled,
+)
 from ..registry import provider_concurrency, provider_rate_limit
 from ..util import (
     cache_key,
@@ -951,7 +959,7 @@ def filter_by_version(
         "matched": len(matched),
         "total": len(candidates),
     }
-    if matched:
+    if matched or request.get("allow_substitution") is not True:
         work["candidates"] = matched
         data["work"] = work
     return data
@@ -1902,6 +1910,7 @@ def prowlarr_search(
         mapped = mapped[: int(limit)]
     for item in mapped:
         if isinstance(item, dict):
+            item.setdefault("provider", "prowlarr")
             _scrub_candidate_urls(item)
     if mapped:
         work["candidates"] = mapped
@@ -1914,6 +1923,64 @@ def prowlarr_search(
     data["work"] = work
     data["request"] = request
     return data
+
+
+def _private_adapter_search(
+    data: dict[str, Any], step_cfg: dict[str, Any], context: Context, provider: str
+) -> dict[str, Any]:
+    if not connector_enabled(context.config, provider):
+        return data
+    request = data.setdefault("request", {})
+    work = data.setdefault("work", {})
+    media_type = request.get("media_type") or work.get("media_type")
+    if media_type not in {"music", "book"} or (provider == "soulseek" and media_type != "music"):
+        return data
+    query = _normalize_search_query(_select_query(data, step_cfg, media_type))
+    if not query:
+        return data
+    try:
+        if provider == "jackett":
+            section = context.config.get("jackett") or {}
+            categories_cfg = section.get("categories")
+            categories = _select_media_mapping(categories_cfg, media_type)
+            candidates = JackettAdapter(context.config).search(query, categories=categories)
+        else:
+            candidates = SoulseekAdapter(context.config).search(query)
+    except (AdapterPolicyError, AdapterContractError, requests.RequestException, ValueError) as exc:
+        message = _safe_error_message(exc)
+        data.setdefault("search", {})[provider] = {
+            "query": query,
+            "count": 0,
+            "error_type": exc.__class__.__name__,
+        }
+        data.setdefault("warnings", []).append(
+            {"step": f"{provider}_search", "type": exc.__class__.__name__, "message": message}
+        )
+        return data
+    existing = work.get("candidates")
+    if not isinstance(existing, list):
+        existing = []
+    work["candidates"] = [*existing, *candidates]
+    data.setdefault("search", {})[provider] = {
+        "query": query,
+        "count": len(candidates),
+        # The pipeline needs candidates transiently; acquisition projection drops this field.
+        "results": candidates,
+    }
+    data["work"] = work
+    return data
+
+
+def jackett_search(
+    data: dict[str, Any], step_cfg: dict[str, Any], context: Context
+) -> dict[str, Any]:
+    return _private_adapter_search(data, step_cfg, context, "jackett")
+
+
+def soulseek_search(
+    data: dict[str, Any], step_cfg: dict[str, Any], context: Context
+) -> dict[str, Any]:
+    return _private_adapter_search(data, step_cfg, context, "soulseek")
 
 
 def filter_candidates(
@@ -1964,7 +2031,13 @@ def filter_candidates(
     for candidate in candidates:
         cat_ids = _extract_category_ids(candidate) if isinstance(candidate, dict) else set()
         if not cat_ids:
-            if allow_missing:
+            candidate_provider = (
+                str(candidate.get("provider") or "").lower()
+                if isinstance(candidate, dict)
+                else ""
+            )
+            # These adapter queries are already category-scoped at their source.
+            if allow_missing or candidate_provider in {"jackett", "soulseek", "slskd"}:
                 filtered.append(candidate)
             else:
                 removed += 1
@@ -2513,9 +2586,9 @@ def dedupe_candidates(
                 return str(value)
         return None
 
-    def candidate_key(candidate: dict[str, Any]) -> tuple[str, str, int]:
+    def candidate_key(candidate: dict[str, Any]) -> tuple[str, str, int, str]:
         if not isinstance(candidate, dict):
-            return ("", "", 0)
+            return ("", "", 0, "")
         artist = candidate.get("artist")
         title = candidate.get("title") or candidate.get("name")
         year = candidate.get("year")
@@ -2526,17 +2599,20 @@ def dedupe_candidates(
             title = title or fields.get("title")
             year = year or fields.get("year")
         if not title:
-            return ("", "", 0)
+            return ("", "", 0, "")
         year_value = 0
         if year:
             try:
                 year_value = int(year)
             except (TypeError, ValueError):
                 year_value = _extract_year(str(year)) or 0
+        provider = str(candidate.get("provider") or "").lower()
+        private_source = provider if provider in {"jackett", "soulseek", "slskd"} else ""
         return (
             str(artist or "").lower(),
             str(title or "").lower(),
             year_value,
+            private_source,
         )
 
     def merge(base: dict[str, Any], other: dict[str, Any]) -> dict[str, Any]:
@@ -2555,13 +2631,13 @@ def dedupe_candidates(
         merged["merged_from"] = [item for item in merged_from if item]
         return merged
 
-    deduped: dict[tuple[str, str, int], dict[str, Any]] = {}
+    deduped: dict[tuple[str, str, int, str], dict[str, Any]] = {}
     for candidate in candidates:
         if not isinstance(candidate, dict):
             continue
         key = candidate_key(candidate)
-        if key == ("", "", 0):
-            deduped[(str(id(candidate)), "", 0)] = candidate
+        if key == ("", "", 0, ""):
+            deduped[(str(id(candidate)), "", 0, "")] = candidate
             continue
         if key in deduped:
             deduped[key] = merge(deduped[key], candidate)
@@ -2975,6 +3051,63 @@ def prowlarr_grab(
         data["dispatch"]["prowlarr"]["response"] = responses[0]["response"]
         data["dispatch"]["prowlarr"]["url"] = responses[0]["url"]
     data["work"] = work
+    return data
+
+
+def private_source_dispatch(
+    data: dict[str, Any], step_cfg: dict[str, Any], context: Context
+) -> dict[str, Any]:
+    """Dispatch one selected candidate to its owning connector after confirmation."""
+
+    work = data.get("work") or {}
+    selected = work.get("selected")
+    if not isinstance(selected, dict):
+        return data
+    private = selected.get("_private") if isinstance(selected.get("_private"), dict) else {}
+    provider = str(selected.get("provider") or private.get("provider") or "prowlarr").lower()
+    if context.dry_run:
+        data.setdefault("dispatch", {})[provider] = {
+            "status": "dry_run",
+            "count": 0,
+        }
+        return data
+    if provider == "prowlarr":
+        return prowlarr_grab(data, step_cfg, context)
+    if provider not in {"jackett", "soulseek", "slskd"}:
+        data.setdefault("dispatch", {})[provider] = {
+            "status": "unavailable",
+            "reason": "selected provider has no authorized dispatch adapter",
+        }
+        return data
+    intent = data.get("acquisition_intent") or {}
+    intent_id = str(intent.get("intent_id") or data.get("run_id") or "unknown")
+    candidate_material = "|".join(
+        str(value)
+        for value in (
+            selected.get("title"),
+            selected.get("size"),
+            selected.get("guid"),
+            private.get("filename"),
+        )
+    )
+    idempotency_key = f"{intent_id}:{hashlib.sha256(candidate_material.encode()).hexdigest()}"
+    try:
+        adapter = JackettAdapter(context.config) if provider == "jackett" else SoulseekAdapter(context.config)
+        result = adapter.dispatch(selected, idempotency_key=idempotency_key)
+    except (AdapterPolicyError, AdapterContractError, requests.RequestException, ValueError) as exc:
+        data.setdefault("dispatch", {})[provider] = {
+            "status": "error",
+            "error_type": exc.__class__.__name__,
+        }
+        data.setdefault("warnings", []).append(
+            {
+                "step": "private_source_dispatch",
+                "type": exc.__class__.__name__,
+                "message": _safe_error_message(exc),
+            }
+        )
+        return data
+    data.setdefault("dispatch", {})[provider] = result
     return data
 
 
@@ -3644,6 +3777,8 @@ BUILTINS = {
     "arr_dispatch": dispatch_arr,
     "extract_release_preferences": extract_release_preferences,
     "prowlarr_search": prowlarr_search,
+    "jackett_search": jackett_search,
+    "soulseek_search": soulseek_search,
     "filter_candidates": filter_candidates,
     "filter_match": filter_match,
     "dedupe_candidates": dedupe_candidates,
@@ -3655,6 +3790,7 @@ BUILTINS = {
     "filter_by_version": filter_by_version,
     "rank_releases": rank_releases,
     "prowlarr_grab": prowlarr_grab,
+    "private_source_dispatch": private_source_dispatch,
     "store_tags": store_tags,
     "book_decide": book_decide,
 }

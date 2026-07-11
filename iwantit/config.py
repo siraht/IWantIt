@@ -32,6 +32,8 @@ def default_config() -> dict[str, Any]:
                 "match": {"media_type": "music"},
                 "steps": [
                     "prowlarr_search",
+                    "jackett_search",
+                    "soulseek_search",
                     "filter_candidates",
                     "filter_match",
                     "dedupe_candidates",
@@ -39,7 +41,7 @@ def default_config() -> dict[str, Any]:
                     "filter_by_version",
                     "rank_releases",
                     "decide",
-                    "prowlarr_grab",
+                    "private_source_dispatch",
                     "store_tags",
                 ],
             },
@@ -217,6 +219,15 @@ def default_config() -> dict[str, Any]:
                 "retry_backoff_seconds": 0.5,
                 "side_effect": True,
             },
+            "jackett_search": {"builtin": "jackett_search"},
+            "soulseek_search": {"builtin": "soulseek_search"},
+            "private_source_dispatch": {
+                "builtin": "private_source_dispatch",
+                "timeout": 20,
+                "retries": 1,
+                "retry_backoff_seconds": 0.5,
+                "side_effect": True,
+            },
             "dispatch_music": {
                 "builtin": "http_dispatch",
                 "request": {
@@ -325,6 +336,29 @@ def default_config() -> dict[str, Any]:
                     },
                 }
             },
+        },
+        "jackett": {
+            "enabled": False,
+            "url": "http://localhost:9117",
+            "api_key": "${ENV:JACKETT_API_KEY}",
+            "indexer": "all",
+            "max_results": 100,
+            "categories": {"music": [3000], "book": [7000]},
+            "dispatch": {
+                "url": "${ENV:JACKETT_DOWNLOAD_CLIENT_URL}",
+                "headers": {
+                    "Authorization": "Bearer ${ENV:JACKETT_DOWNLOAD_CLIENT_TOKEN}"
+                },
+                "url_field": "urls",
+            },
+        },
+        "soulseek": {
+            "enabled": False,
+            "url": "http://localhost:5030",
+            "api_key": "${ENV:SLSKD_API_KEY}",
+            "search_timeout": 8,
+            "max_results": 100,
+            "poll_interval": 0.25,
         },
         "book": {
             "default_format": "both",

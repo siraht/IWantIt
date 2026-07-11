@@ -54,6 +54,18 @@ STEP_METADATA: dict[str, dict[str, Any]] = {
         "emits": ["search.prowlarr", "work.candidates"],
         "description": "Search Prowlarr for candidates.",
     },
+    "jackett_search": {
+        "side_effect": False,
+        "requires": ["request.query", "work.media_type"],
+        "emits": ["search.jackett", "work.candidates"],
+        "description": "Search an explicitly enabled local Jackett Torznab endpoint.",
+    },
+    "soulseek_search": {
+        "side_effect": False,
+        "requires": ["request.query", "work.media_type"],
+        "emits": ["search.soulseek", "work.candidates"],
+        "description": "Search Soulseek through an explicitly enabled local slskd API.",
+    },
     "filter_candidates": {
         "side_effect": False,
         "requires": ["work.candidates"],
@@ -120,6 +132,13 @@ STEP_METADATA: dict[str, dict[str, Any]] = {
         "emits": ["dispatch.prowlarr"],
         "dispatch_key": "prowlarr",
         "description": "Send selected release to Prowlarr.",
+    },
+    "private_source_dispatch": {
+        "side_effect": True,
+        "requires": ["work.selected"],
+        "emits": ["dispatch.*"],
+        "dispatch_key": "private_source",
+        "description": "Dispatch the selected candidate through its owning private connector.",
     },
     "http_dispatch": {
         "side_effect": True,
