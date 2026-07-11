@@ -35,6 +35,7 @@ iwantit run --text "Bernard Badie - Bones [2011]" --confirm
 
 Integration points (all configurable in `~/.config/iwantit/config.yaml`):
 - Prowlarr search + grab (music/books)
+- Goodreads Want to Read ingestion (CSV bootstrap + incremental RSS)
 - Radarr and Sonarr dispatch (movie/tv)
 - Web search providers (Kagi/Brave) for release verification
 - Optional tracker enrichment (Redacted)
@@ -72,6 +73,31 @@ Batch inputs can be a JSON array, JSONL, or plain lines:
 ```bash
 iwantit run --batch inputs.jsonl --jobs 4
 ```
+
+### Goodreads Want to Read automation
+
+Import a complete Goodreads export as a non-downloading baseline:
+
+```bash
+iwantit shelf sync goodreads --csv docs/goodreads_library_export.csv --limit 0
+```
+
+Queue the existing shelf only when you explicitly want a full backfill:
+
+```bash
+iwantit shelf sync goodreads --csv docs/goodreads_library_export.csv --backfill --dry-run
+```
+
+Poll the configured RSS shelf and process due ebook/audiobook legs:
+
+```bash
+iwantit shelf sync goodreads --confirm
+iwantit shelf status
+iwantit shelf retry
+```
+
+CSV imports, incremental identity, per-format completion, retries, and the systemd
+timer are documented in [`docs/goodreads_automation.md`](docs/goodreads_automation.md).
 
 ### Doctor / setup checks
 Validate configuration and connectivity:
@@ -146,6 +172,15 @@ arr:
 redacted:
   url: https://redacted.sh
   api_key: CHANGE_ME
+goodreads:
+  shelf_url: https://www.goodreads.com/review/list/151049665-travis?shelf=to-read
+  formats: [ebook, audiobook]
+  batch_limit: 10
+  inventory:
+    required: true
+    sources:
+      ebook: [{type: ssh, host: root@192.168.1.222, path: /mnt/user/visualmedia}]
+      audiobook: [{type: ssh, host: root@192.168.1.222, path: /mnt/user/audiobooks}]
 ```
 
 ## How it works (mental model)
@@ -262,6 +297,10 @@ iwantit init [--force]
 iwantit run [--text|--url|--image|--json|--stdin] [--workflow name] [--dry-run] [--confirm] [--book-format ebook|audiobook|both]
 iwantit step <step-name> [--text|--url|--image|--json|--stdin] [--book-format ebook|audiobook|both]
 iwantit choose [--json|--stdin] [--interactive] [--select <idx|substring>]
+iwantit shelf sync goodreads [--csv export.csv] [--backfill] [--dry-run|--confirm]
+iwantit shelf status
+iwantit shelf retry [--include-choices] [--include-uncertain]
+iwantit shelf resolve <goodreads-book-id> --book-format ebook|audiobook --choice N --confirm
 iwantit list workflows|steps
 iwantit validate
 ```

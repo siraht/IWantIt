@@ -20,6 +20,7 @@ from .config import (
     save_default_secrets,
     validate_config,
 )
+from .goodreads import GoodreadsError, GoodreadsShelfService, configured_formats
 from .registry import provider_required_keys
 from .step_metadata import STEP_METADATA
 from .pipeline import Context, run_workflow
@@ -677,6 +678,99 @@ def cmd_acquire(args: argparse.Namespace) -> int:
     return 1 if result["status"] == "error" else 0
 
 
+def _goodreads_service(args: argparse.Namespace) -> tuple[GoodreadsShelfService, dict[str, Any]]:
+    config = load_config(ensure_config_exists(args.config))
+    return GoodreadsShelfService(config, BUILTINS), config
+
+
+def cmd_shelf_sync(args: argparse.Namespace) -> int:
+    try:
+        service, _config = _goodreads_service(args)
+        section = service.section
+        shelf = args.shelf or section.get("shelf") or "to-read"
+        formats = configured_formats(args.book_format or section.get("formats"))
+        shelf_url = args.url if args.url is not None else section.get("shelf_url")
+        csv_path = Path(args.csv).expanduser() if args.csv else None
+        result = service.sync(
+            shelf_url=shelf_url,
+            csv_path=csv_path,
+            shelf=shelf,
+            formats=formats,
+            backfill=args.backfill,
+            limit=args.limit,
+            dry_run=args.dry_run,
+            confirm=args.confirm,
+        )
+    except (GoodreadsError, OSError, requests.RequestException, RuntimeError, ValueError) as exc:
+        write_json(
+            {
+                "schema": "iwantit.shelf-sync-result/1",
+                "source": "goodreads",
+                "status": "error",
+                "error": {"message": _safe_error_message(exc), "type": exc.__class__.__name__},
+            }
+        )
+        return 1
+    write_json(result)
+    return 1 if result["processing"].get("error") else 0
+
+
+def cmd_shelf_status(args: argparse.Namespace) -> int:
+    try:
+        service, _config = _goodreads_service(args)
+        section = service.section
+        shelf = args.shelf or section.get("shelf") or "to-read"
+        result = service.journal.status(shelf=shelf, review_limit=args.review_limit)
+    except (GoodreadsError, OSError, ValueError) as exc:
+        write_json({"status": "error", "error": {"message": _safe_error_message(exc)}})
+        return 1
+    write_json(result)
+    return 0
+
+
+def cmd_shelf_retry(args: argparse.Namespace) -> int:
+    try:
+        service, _config = _goodreads_service(args)
+        section = service.section
+        shelf = args.shelf or section.get("shelf") or "to-read"
+        reset = service.journal.retry(
+            shelf=shelf,
+            include_choices=args.include_choices,
+            include_uncertain=args.include_uncertain,
+        )
+        result = {
+            "schema": "iwantit.shelf-retry-result/1",
+            "source": "goodreads",
+            "shelf": shelf,
+            "reset": reset,
+            "state": service.journal.status(shelf=shelf),
+        }
+    except (GoodreadsError, OSError, ValueError) as exc:
+        write_json({"status": "error", "error": {"message": _safe_error_message(exc)}})
+        return 1
+    write_json(result)
+    return 0
+
+
+def cmd_shelf_resolve(args: argparse.Namespace) -> int:
+    try:
+        service, _config = _goodreads_service(args)
+        section = service.section
+        shelf = args.shelf or section.get("shelf") or "to-read"
+        result = service.resolve_choice(
+            shelf=shelf,
+            item_id=args.item_id,
+            book_format=args.book_format,
+            choice=args.choice,
+            confirm=args.confirm,
+        )
+    except (GoodreadsError, OSError, requests.RequestException, RuntimeError, ValueError) as exc:
+        write_json({"status": "error", "error": {"message": _safe_error_message(exc)}})
+        return 1
+    write_json(result)
+    return 0 if result.get("outcome") == "downloaded" else 1
+
+
 def _load_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.json:
         data = _load_json_file(args.json)
@@ -1081,6 +1175,7 @@ def build_parser() -> argparse.ArgumentParser:
         "  iwantit run --text \"...\" --confirm   (allow dispatch/grab)\n"
         "  iwantit run ... | iwantit choose --stdin --interactive\n"
         "  iwantit run --batch inputs.jsonl --jobs 4\n"
+        "  iwantit shelf sync goodreads --confirm\n"
         "  iwantit doctor\n"
         "\n"
         "Notes:\n"
@@ -1174,6 +1269,64 @@ def build_parser() -> argparse.ArgumentParser:
         help="Approve and dispatch the intent (side effects allowed)",
     )
     acquire_cmd.set_defaults(func=cmd_acquire)
+
+    shelf_cmd = sub.add_parser(
+        "shelf",
+        help="Ingest and process external media wishlists",
+        description="Durably synchronize Goodreads shelves into the book workflow.",
+    )
+    shelf_sub = shelf_cmd.add_subparsers(dest="shelf_command", required=True)
+
+    shelf_sync = shelf_sub.add_parser("sync", parents=[common], help="Ingest and process a shelf")
+    shelf_sync.add_argument("provider", nargs="?", choices=["goodreads"], default="goodreads")
+    shelf_sync.add_argument("--url", help="Goodreads shelf HTML or RSS URL")
+    shelf_sync.add_argument("--csv", help="Goodreads library export for a complete snapshot")
+    shelf_sync.add_argument("--shelf", help="Goodreads shelf name (default: to-read)")
+    shelf_sync.add_argument(
+        "--book-format",
+        choices=["ebook", "audiobook", "both"],
+        help="Format legs to create (default: configured formats)",
+    )
+    shelf_sync.add_argument(
+        "--backfill",
+        action="store_true",
+        help="Queue baseline CSV entries; without this, CSV import is state-only",
+    )
+    shelf_sync.add_argument("--limit", type=int, help="Maximum format legs to process this run")
+    shelf_sync.add_argument("--dry-run", action="store_true", help="Preview due acquisitions")
+    shelf_sync.add_argument(
+        "--confirm", action="store_true", help="Allow confirmed Prowlarr grabs for due entries"
+    )
+    shelf_sync.set_defaults(func=cmd_shelf_sync)
+
+    shelf_status = shelf_sub.add_parser("status", parents=[common], help="Show durable shelf state")
+    shelf_status.add_argument("--shelf", help="Goodreads shelf name")
+    shelf_status.add_argument("--review-limit", type=int, default=25)
+    shelf_status.set_defaults(func=cmd_shelf_status)
+
+    shelf_retry = shelf_sub.add_parser("retry", parents=[common], help="Retry failed/unavailable legs")
+    shelf_retry.add_argument("--shelf", help="Goodreads shelf name")
+    shelf_retry.add_argument(
+        "--include-choices", action="store_true", help="Also retry entries awaiting manual choice"
+    )
+    shelf_retry.add_argument(
+        "--include-uncertain",
+        action="store_true",
+        help="Retry abandoned acquisitions only after checking the download client",
+    )
+    shelf_retry.set_defaults(func=cmd_shelf_retry)
+
+    shelf_resolve = shelf_sub.add_parser(
+        "resolve", parents=[common], help="Dispatch an explicit choice for an ambiguous shelf item"
+    )
+    shelf_resolve.add_argument("item_id", help="Goodreads Book ID from shelf status")
+    shelf_resolve.add_argument("--book-format", choices=["ebook", "audiobook"], required=True)
+    shelf_resolve.add_argument("--choice", type=int, required=True, help="Candidate index")
+    shelf_resolve.add_argument("--shelf", help="Goodreads shelf name")
+    shelf_resolve.add_argument(
+        "--confirm", action="store_true", help="Required approval for the selected Prowlarr grab"
+    )
+    shelf_resolve.set_defaults(func=cmd_shelf_resolve)
 
     choose_group = argparse.ArgumentParser(add_help=False)
     choose_source = choose_group.add_mutually_exclusive_group()

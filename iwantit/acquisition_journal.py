@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +23,7 @@ class AcquisitionJournal:
             self.path.parent.chmod(0o700)
         except OSError:
             pass
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS acquisition_dispatch (
@@ -44,6 +45,15 @@ class AcquisitionJournal:
         connection.execute("PRAGMA journal_mode=WAL")
         return connection
 
+    @contextmanager
+    def _connection(self):  # noqa: ANN202
+        connection = self._connect()
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
+
     @staticmethod
     def fingerprint(intent: dict[str, Any]) -> str:
         material = {
@@ -58,7 +68,7 @@ class AcquisitionJournal:
     def begin(self, intent: dict[str, Any]) -> dict[str, Any] | None:
         intent_id = str(intent["intent_id"])
         fingerprint = self.fingerprint(intent)
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT fingerprint, state, result_json, "
@@ -119,7 +129,7 @@ class AcquisitionJournal:
     def finish(self, intent_id: str, result: dict[str, Any]) -> None:
         state = "failed" if result.get("status") == "error" else "completed"
         serialized = json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 "UPDATE acquisition_dispatch SET state = ?, result_json = ?, "
                 "updated_at = CURRENT_TIMESTAMP WHERE intent_id = ?",
@@ -127,7 +137,7 @@ class AcquisitionJournal:
             )
 
     def fail(self, intent_id: str) -> None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 "UPDATE acquisition_dispatch SET state = 'failed', result_json = NULL, "
                 "updated_at = CURRENT_TIMESTAMP WHERE intent_id = ?",

@@ -14,6 +14,7 @@ def config_schema() -> dict[str, Any]:
         "properties": {
             "pre_steps": {"type": "array", "items": {"type": "string"}},
             "acquisition": {"type": "object", "additionalProperties": True},
+            "goodreads": {"type": "object", "additionalProperties": True},
             "default_workflow": {"type": "string"},
             "workflows": {
                 "type": "array",

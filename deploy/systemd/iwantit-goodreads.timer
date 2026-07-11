@@ -1,0 +1,11 @@
+[Unit]
+Description=Poll Goodreads Want to Read every 15 minutes
+
+[Timer]
+OnBootSec=5m
+OnUnitActiveSec=15m
+RandomizedDelaySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target

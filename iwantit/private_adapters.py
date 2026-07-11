@@ -14,7 +14,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import quote, urljoin, urlparse
+from urllib.parse import quote, urlparse
 from xml.etree import ElementTree
 
 import requests

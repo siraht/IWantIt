@@ -7,6 +7,7 @@ from typing import Any
 
 import yaml
 
+from .goodreads import DEFAULT_GOODREADS_SETTINGS
 from .paths import config_path, ensure_dir, secrets_path
 from .plugins import discover_plugins
 from .registry import validate_registry_requirements
@@ -369,6 +370,7 @@ def default_config() -> dict[str, Any]:
             "default_format": "both",
             "auto_select_each_format": True,
         },
+        "goodreads": dict(DEFAULT_GOODREADS_SETTINGS),
         "diagnostics": {
             "failed_queries": {"enabled": True},
         },
