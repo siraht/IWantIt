@@ -6,12 +6,15 @@ import copy
 import hashlib
 import json
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from jsonschema import Draft202012Validator
 
+from .acquisition_journal import AcquisitionJournal
 from .pipeline import BuiltinStep, run_workflow
+from .paths import state_dir
 from .registry import iter_active_providers, merge_provider_registry
 
 INTENT_SCHEMA_ID = "iwantit.acquisition-intent/1"
@@ -142,6 +145,16 @@ class AcquisitionService:
         self.config = config
         self.builtins = builtins
         self.runner = runner or self._run_workflow
+        acquisition_cfg = config.get("acquisition") or {}
+        journal_path = acquisition_cfg.get("idempotency_path")
+        if acquisition_cfg.get("idempotency_enabled") is True:
+            self.journal = AcquisitionJournal(
+                Path(journal_path).expanduser()
+                if journal_path
+                else state_dir() / "acquisition-dispatch.sqlite3"
+            )
+        else:
+            self.journal = None
 
     def handle(self, intent: dict[str, Any]) -> dict[str, Any]:
         errors = sorted(
@@ -168,9 +181,20 @@ class AcquisitionService:
                 },
             )
 
-        data = self._pipeline_input(intent)
-        choice = confirmation.get("selected_candidate_index")
-        pipeline = self.runner(data, action == "preview", action == "dispatch", choice)
+        replay = None
+        if action == "dispatch" and self.journal is not None:
+            replay = self.journal.begin(intent)
+        if replay is not None:
+            return replay
+
+        try:
+            data = self._pipeline_input(intent)
+            choice = confirmation.get("selected_candidate_index")
+            pipeline = self.runner(data, action == "preview", action == "dispatch", choice)
+        except Exception:
+            if action == "dispatch" and self.journal is not None:
+                self.journal.fail(str(intent["intent_id"]))
+            raise
         decision = pipeline.get("decision") or {}
         dispatch = pipeline.get("dispatch") or {}
         if pipeline.get("error") or decision.get("status") == "error":
@@ -186,7 +210,10 @@ class AcquisitionService:
             status = "selected"
         else:
             status = "previewed"
-        return self._result(intent, status=status, pipeline=pipeline)
+        result = self._result(intent, status=status, pipeline=pipeline)
+        if action == "dispatch" and self.journal is not None:
+            self.journal.finish(str(intent["intent_id"]), result)
+        return result
 
     def _pipeline_input(self, intent: dict[str, Any]) -> dict[str, Any]:
         recording = intent["recording"]

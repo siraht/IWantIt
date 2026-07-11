@@ -26,6 +26,10 @@ def default_config() -> dict[str, Any]:
             "resolve_track_release",
         ],
         "default_workflow": "music",
+        "acquisition": {
+            "idempotency_enabled": True,
+            "idempotency_path": None,
+        },
         "workflows": [
             {
                 "name": "music",

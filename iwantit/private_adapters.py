@@ -39,9 +39,8 @@ class RequestBudget:
     max_results: int
 
 
-def connector_enabled(config: dict[str, Any], provider: str) -> bool:
-    """Return true only for an explicitly enabled connector and a live kill switch."""
-
+def private_execution_allowed(config: dict[str, Any], provider: str) -> bool:
+    """Apply the process-wide kill switch and a provider-level disable flag."""
     if os.environ.get("IWANTIT_PRIVATE_ACQUISITION_DISABLED", "").lower() in {
         "1",
         "true",
@@ -50,7 +49,18 @@ def connector_enabled(config: dict[str, Any], provider: str) -> bool:
     }:
         return False
     section = config.get(provider)
-    return isinstance(section, dict) and section.get("enabled") is True
+    return isinstance(section, dict) and section.get("enabled", True) is not False
+
+
+def connector_enabled(config: dict[str, Any], provider: str) -> bool:
+    """Return true only for an explicitly enabled optional connector."""
+
+    section = config.get(provider)
+    return (
+        private_execution_allowed(config, provider)
+        and isinstance(section, dict)
+        and section.get("enabled") is True
+    )
 
 
 def validate_private_endpoint(config: dict[str, Any], provider: str) -> str:

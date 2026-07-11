@@ -15,7 +15,7 @@ from iwantit.private_adapters import (
 )
 from iwantit.registry import iter_active_providers, validate_registry_requirements
 from iwantit.pipeline import Context
-from iwantit.steps.builtin import BUILTINS, dedupe_candidates, filter_candidates
+from iwantit.steps.builtin import BUILTINS, dedupe_candidates, filter_candidates, prowlarr_search
 
 
 class FakeResponse:
@@ -67,6 +67,20 @@ class PrivateAdapterPolicyTests(TestCase):
             self.assertFalse(connector_enabled(config, "soulseek"))
             with self.assertRaisesRegex(AdapterPolicyError, "disabled"):
                 SoulseekAdapter(config)
+
+    def test_global_kill_switch_also_blocks_legacy_prowlarr(self) -> None:
+        data = {
+            "request": {"query": "Artist Track", "media_type": "music"},
+            "work": {"media_type": "music"},
+        }
+        config = {"prowlarr": {"url": "http://localhost:9696", "api_key": "secret"}}
+        with (
+            patch.dict(os.environ, {"IWANTIT_PRIVATE_ACQUISITION_DISABLED": "true"}),
+            patch("iwantit.steps.builtin.request_with_retry") as request,
+        ):
+            result = prowlarr_search(data, {}, Context(config=config, state_path="/tmp"))
+        request.assert_not_called()
+        self.assertEqual(result["search"]["prowlarr"]["error_type"], "ConnectorDisabled")
 
     def test_clear_text_remote_endpoint_fails_closed(self) -> None:
         config = {"jackett": {"enabled": True, "url": "http://example.com", "api_key": "x"}}

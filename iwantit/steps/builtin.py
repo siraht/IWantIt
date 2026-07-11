@@ -23,6 +23,7 @@ from ..private_adapters import (
     JackettAdapter,
     SoulseekAdapter,
     connector_enabled,
+    private_execution_allowed,
 )
 from ..registry import provider_concurrency, provider_rate_limit
 from ..util import (
@@ -1787,6 +1788,13 @@ def determine_media_type(
 def prowlarr_search(
     data: dict[str, Any], step_cfg: dict[str, Any], context: Context
 ) -> dict[str, Any]:
+    if not private_execution_allowed(context.config, "prowlarr"):
+        data.setdefault("search", {})["prowlarr"] = {
+            "query": "",
+            "count": 0,
+            "error_type": "ConnectorDisabled",
+        }
+        return data
     request = data.setdefault("request", {})
     work = data.setdefault("work", {})
     media_type = request.get("media_type") or work.get("media_type")
@@ -2871,6 +2879,12 @@ def rank_releases(
 def prowlarr_grab(
     data: dict[str, Any], step_cfg: dict[str, Any], context: Context
 ) -> dict[str, Any]:
+    if not private_execution_allowed(context.config, "prowlarr"):
+        data.setdefault("dispatch", {})["prowlarr"] = {
+            "status": "unavailable",
+            "reason": "connector disabled by provider policy or global kill switch",
+        }
+        return data
     work = data.get("work", {})
     selected_items = work.get("selected_items")
     if isinstance(selected_items, list) and selected_items:
