@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <item>
+      <title>Artist - Track (Extended Mix) FLAC WEB</title>
+      <guid>https://jackett.local/details/42?token=private</guid>
+      <link>https://jackett.local/download/42?apikey=private</link>
+      <comments>https://catalog.invalid/release/42</comments>
+      <size>12345678</size>
+      <torznab:attr name="indexer" value="Configured tracker" />
+      <torznab:attr name="seeders" value="9" />
+      <torznab:attr name="peers" value="11" />
+      <torznab:attr name="files" value="2" />
+    </item>
+  </channel>
+</rss>

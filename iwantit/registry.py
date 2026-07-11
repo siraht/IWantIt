@@ -43,6 +43,39 @@ def builtin_provider_registry() -> dict[str, dict[str, Any]]:
                 "remote_inference_allowed": False,
             },
         },
+        "jackett": {
+            "type": "indexer",
+            "name": "jackett",
+            "media_types": ["music", "book"],
+            "auth": {"scheme": "api_key", "key_path": "jackett.api_key"},
+            "required_keys": ["jackett.url", "jackett.api_key"],
+            "optional_keys": ["jackett.indexer", "jackett.dispatch"],
+            "rate_limit": {"requests_per_minute": 60},
+            "capabilities": {"search": True, "handoff": True},
+            "data_handling": {
+                "classification": "local_private",
+                "persistence": "sanitized_local",
+                "community_publish_allowed": False,
+                "remote_inference_allowed": False,
+            },
+        },
+        "soulseek": {
+            "type": "peer_network_client",
+            "name": "soulseek",
+            "implementation": "slskd",
+            "media_types": ["music"],
+            "auth": {"scheme": "api_key", "key_path": "soulseek.api_key"},
+            "required_keys": ["soulseek.url", "soulseek.api_key"],
+            "optional_keys": ["soulseek.search_timeout", "soulseek.max_results"],
+            "rate_limit": {"requests_per_minute": 30},
+            "capabilities": {"search": True, "dispatch": True, "cancel": True},
+            "data_handling": {
+                "classification": "local_private",
+                "persistence": "sanitized_local",
+                "community_publish_allowed": False,
+                "remote_inference_allowed": False,
+            },
+        },
         "redacted": {
             "type": "tracker",
             "name": "redacted",
@@ -105,8 +138,12 @@ def iter_active_providers(config: dict[str, Any]) -> list[str]:
             key = f"web_search.{name}"
             if key not in active:
                 active.append(key)
-    if config.get("prowlarr"):
+    if isinstance(config.get("prowlarr"), dict) and config["prowlarr"].get("enabled", True):
         active.append("prowlarr")
+    if isinstance(config.get("jackett"), dict) and config["jackett"].get("enabled") is True:
+        active.append("jackett")
+    if isinstance(config.get("soulseek"), dict) and config["soulseek"].get("enabled") is True:
+        active.append("soulseek")
     red = config.get("redacted", {}) or {}
     if red:
         active.append("redacted")

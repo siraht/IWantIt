@@ -41,6 +41,8 @@ def config_schema() -> dict[str, Any]:
             },
             "web_search": {"type": "object", "additionalProperties": True},
             "prowlarr": {"type": "object", "additionalProperties": True},
+            "jackett": {"type": "object", "additionalProperties": True},
+            "soulseek": {"type": "object", "additionalProperties": True},
             "redacted": {"type": "object", "additionalProperties": True},
             "arr": {"type": "object", "additionalProperties": True},
             "provider_registry": {"type": "object", "additionalProperties": True},
