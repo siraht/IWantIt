@@ -14,8 +14,9 @@ class IdempotencyConflictError(ValueError):
 
 
 class AcquisitionJournal:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, lease_seconds: int = 900) -> None:
         self.path = path.expanduser()
+        self.lease_seconds = max(60, lease_seconds)
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         try:
             self.path.parent.chmod(0o700)
@@ -60,7 +61,9 @@ class AcquisitionJournal:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
-                "SELECT fingerprint, state, result_json FROM acquisition_dispatch WHERE intent_id = ?",
+                "SELECT fingerprint, state, result_json, "
+                "COALESCE(unixepoch('now') - unixepoch(updated_at), 0) "
+                "FROM acquisition_dispatch WHERE intent_id = ?",
                 (intent_id,),
             ).fetchone()
             if row:
@@ -70,7 +73,7 @@ class AcquisitionJournal:
                     )
                 if row[1] == "completed" and row[2]:
                     return json.loads(row[2])
-                if row[1] == "in_progress":
+                if row[1] == "in_progress" and int(row[3]) < self.lease_seconds:
                     return {
                         "schema": "iwantit.acquisition-result/1",
                         "intent_id": intent_id,
@@ -99,6 +102,8 @@ class AcquisitionJournal:
                         },
                         "error": None,
                     }
+                # Failed entries and abandoned leases are safe to claim again. The
+                # default lease exceeds every connector's bounded request budget.
                 connection.execute(
                     "UPDATE acquisition_dispatch SET state = 'in_progress', result_json = NULL, "
                     "updated_at = CURRENT_TIMESTAMP WHERE intent_id = ?",

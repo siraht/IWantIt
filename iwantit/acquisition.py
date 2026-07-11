@@ -151,7 +151,8 @@ class AcquisitionService:
             self.journal = AcquisitionJournal(
                 Path(journal_path).expanduser()
                 if journal_path
-                else state_dir() / "acquisition-dispatch.sqlite3"
+                else state_dir() / "acquisition-dispatch.sqlite3",
+                lease_seconds=int(acquisition_cfg.get("lease_seconds", 900)),
             )
         else:
             self.journal = None
@@ -197,11 +198,16 @@ class AcquisitionService:
             raise
         decision = pipeline.get("decision") or {}
         dispatch = pipeline.get("dispatch") or {}
-        if pipeline.get("error") or decision.get("status") == "error":
+        dispatch_values = [value for value in dispatch.values() if isinstance(value, dict)]
+        if (
+            pipeline.get("error")
+            or decision.get("status") == "error"
+            or (action == "dispatch" and any(value.get("status") == "error" for value in dispatch_values))
+        ):
             status = "error"
         elif action == "dispatch" and any(
             isinstance(value, dict) and value.get("status") == "ok"
-            for value in dispatch.values()
+            for value in dispatch_values
         ):
             status = "dispatched"
         elif decision.get("status") == "needs_choice":

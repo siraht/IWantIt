@@ -34,6 +34,8 @@ acquisition:
   idempotency_enabled: true
   # Omit for ~/.local/state/iwantit/acquisition-dispatch.sqlite3.
   idempotency_path: null
+  # Exceeds the bounded connector retry window; permits crash recovery afterward.
+  lease_seconds: 900
 
 prowlarr:
   enabled: true
@@ -133,6 +135,7 @@ Official references: [slskd repository](https://github.com/slskd/slskd) and
 - Cross-provider results are kept separate. Filename similarity never merges
   private dispatch coordinates or turns observations into canonical identity.
 - A failed dispatch journal entry may be retried. A completed one is replayed.
+  An abandoned in-progress lease becomes retryable after the configured lease.
   Reusing an intent id for a different recording, format, policy, or selection
   fails closed.
 

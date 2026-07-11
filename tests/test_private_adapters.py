@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -269,6 +270,44 @@ class PrivateAdapterWorkflowTests(TestCase):
         self.assertEqual(result["status"], "dispatched")
         self.assertTrue(result["side_effects_allowed"])
         self.assertEqual(result["dispatch"]["jackett"]["reference"], "opaque")
+
+    def test_adapter_dispatch_error_is_not_false_completion_and_can_retry(self) -> None:
+        with TemporaryDirectory() as directory:
+            config = self.workflow_config()
+            config["acquisition"] = {
+                "idempotency_enabled": True,
+                "idempotency_path": str(Path(directory) / "dispatch.sqlite3"),
+            }
+            service = AcquisitionService(config, BUILTINS)
+            payload = {
+                "schema": "iwantit.acquisition-intent/1",
+                "intent_id": "retry-dispatch",
+                "action": "dispatch",
+                "recording": {
+                    "ref": "err:recording:1",
+                    "artist": "Artist",
+                    "title": "Track",
+                    "version": "Extended Mix",
+                },
+                "desired": {"formats": ["FLAC"], "media": ["WEB"], "exact_version": True},
+                "confirmation": {"approved": True, "selected_candidate_index": 0},
+            }
+            with (
+                patch.object(JackettAdapter, "search", return_value=[self.candidate()]),
+                patch.object(
+                    JackettAdapter,
+                    "dispatch",
+                    side_effect=[
+                        AdapterPolicyError("temporary policy failure"),
+                        {"status": "ok", "count": 1, "id": "opaque"},
+                    ],
+                ) as dispatch,
+            ):
+                first = service.handle(payload)
+                second = service.handle(payload)
+            self.assertEqual(first["status"], "error")
+            self.assertEqual(second["status"], "dispatched")
+            self.assertEqual(dispatch.call_count, 2)
 
     def test_exact_version_mismatch_does_not_silently_substitute(self) -> None:
         config = self.workflow_config()

@@ -29,6 +29,7 @@ def default_config() -> dict[str, Any]:
         "acquisition": {
             "idempotency_enabled": True,
             "idempotency_path": None,
+            "lease_seconds": 900,
         },
         "workflows": [
             {
