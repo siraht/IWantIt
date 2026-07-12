@@ -109,6 +109,14 @@ the grab is definitely absent, explicitly release it with:
 iwantit shelf retry --include-uncertain
 ```
 
+If an entry is `quarantined`, first remove the invalid payload and its download-client
+job. After verifying that no bad copy remains, explicitly release it for a newly
+ranked search with:
+
+```bash
+iwantit shelf retry --include-quarantined
+```
+
 Resolve a `needs_choice` entry by rerunning it with the selected candidate index:
 
 ```bash

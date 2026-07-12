@@ -581,12 +581,15 @@ class ShelfJournal:
         shelf: str,
         include_choices: bool = False,
         include_uncertain: bool = False,
+        include_quarantined: bool = False,
     ) -> int:
         statuses = ["not_found", "error"]
         if include_choices:
             statuses.append("needs_choice")
         if include_uncertain:
             statuses.append("uncertain")
+        if include_quarantined:
+            statuses.append("quarantined")
         placeholders = ",".join("?" for _ in statuses)
         with self._connection() as connection:
             return connection.execute(

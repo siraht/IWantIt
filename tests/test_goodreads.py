@@ -113,6 +113,20 @@ class ShelfJournalTests(TestCase):
             self.assertEqual(journal.retry(shelf="to-read"), 0)
             self.assertEqual(journal.retry(shelf="to-read", include_uncertain=True), 1)
 
+    def test_quarantined_acquisition_requires_explicit_retry(self) -> None:
+        with TemporaryDirectory() as directory:
+            journal = ShelfJournal(Path(directory) / "shelf.sqlite3")
+            journal.ingest(
+                [ShelfBook("1", "Book", "Author")],
+                shelf="to-read",
+                formats=("ebook",),
+                queue_new=True,
+            )
+            with journal._connection() as connection:
+                connection.execute("UPDATE shelf_leg SET status = 'quarantined'")
+            self.assertEqual(journal.retry(shelf="to-read"), 0)
+            self.assertEqual(journal.retry(shelf="to-read", include_quarantined=True), 1)
+
 
 class GoodreadsShelfServiceTests(TestCase):
     def _service(self, directory: str, runner):  # noqa: ANN001, ANN202
@@ -301,7 +315,9 @@ class GoodreadsShelfServiceTests(TestCase):
             ["shelf", "sync", "goodreads", "--csv", "library.csv", "--backfill", "--confirm"]
         )
         status = parser.parse_args(["shelf", "status"])
-        retry = parser.parse_args(["shelf", "retry", "--include-choices"])
+        retry = parser.parse_args(
+            ["shelf", "retry", "--include-choices", "--include-quarantined"]
+        )
         resolve = parser.parse_args(
             [
                 "shelf",
@@ -319,5 +335,6 @@ class GoodreadsShelfServiceTests(TestCase):
         self.assertEqual(status.shelf_command, "status")
         self.assertTrue(retry.include_choices)
         self.assertFalse(retry.include_uncertain)
+        self.assertTrue(retry.include_quarantined)
         self.assertEqual(resolve.item_id, "123")
         self.assertTrue(resolve.confirm)

@@ -739,6 +739,7 @@ def cmd_shelf_retry(args: argparse.Namespace) -> int:
             shelf=shelf,
             include_choices=args.include_choices,
             include_uncertain=args.include_uncertain,
+            include_quarantined=args.include_quarantined,
         )
         result = {
             "schema": "iwantit.shelf-retry-result/1",
@@ -1383,6 +1384,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-uncertain",
         action="store_true",
         help="Retry abandoned acquisitions only after checking the download client",
+    )
+    shelf_retry.add_argument(
+        "--include-quarantined",
+        action="store_true",
+        help="Retry releases quarantined by an operator after the bad payload is removed",
     )
     shelf_retry.set_defaults(func=cmd_shelf_retry)
 
