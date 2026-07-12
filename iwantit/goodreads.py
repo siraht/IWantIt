@@ -236,6 +236,7 @@ class ShelfJournal:
                     next_attempt_at TEXT,
                     last_attempt_at TEXT,
                     run_id TEXT,
+                    release_id TEXT,
                     last_error TEXT,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (source, shelf, item_id, format),
@@ -251,6 +252,11 @@ class ShelfJournal:
                 );
                 """
             )
+            columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(shelf_leg)")
+            }
+            if "release_id" not in columns:
+                connection.execute("ALTER TABLE shelf_leg ADD COLUMN release_id TEXT")
         try:
             self.path.chmod(0o600)
         except OSError:
@@ -487,7 +493,7 @@ class ShelfJournal:
                        i.date_added, i.source_url
                 FROM shelf_item i JOIN shelf_leg l USING(source, shelf, item_id)
                 WHERE i.source = ? AND i.shelf = ? AND i.active = 1 AND l.format = ?
-                  AND l.status NOT IN ('complete', 'owned', 'in_progress', 'uncertain')
+                  AND l.status NOT IN ('owned', 'in_progress', 'uncertain')
                 """,
                 (GOODREADS_SOURCE, shelf, book_format),
             ).fetchall()
@@ -507,7 +513,7 @@ class ShelfJournal:
                     last_error = NULL, updated_at = CURRENT_TIMESTAMP
                 WHERE source = ? AND shelf = ? AND format = ?
                   AND item_id IN ({placeholders})
-                  AND status NOT IN ('complete', 'in_progress', 'uncertain')
+                  AND status NOT IN ('in_progress', 'uncertain')
                 """,
                 (GOODREADS_SOURCE, shelf, book_format, *item_ids),
             ).rowcount
@@ -520,19 +526,22 @@ class ShelfJournal:
         book_format: str,
         status: str,
         run_id: str | None = None,
+        release_id: str | None = None,
         error: str | None = None,
         retry_at: datetime | None = None,
     ) -> None:
         with self._connection() as connection:
             connection.execute(
                 """
-                UPDATE shelf_leg SET status = ?, run_id = ?, last_error = ?,
+                UPDATE shelf_leg SET status = ?, run_id = ?,
+                    release_id = COALESCE(?, release_id), last_error = ?,
                     next_attempt_at = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE source = ? AND shelf = ? AND item_id = ? AND format = ?
                 """,
                 (
                     status,
                     run_id,
+                    release_id,
                     _clean(error)[:500] or None,
                     _utc_sql(retry_at) if retry_at else None,
                     GOODREADS_SOURCE,
@@ -541,6 +550,18 @@ class ShelfJournal:
                     book_format,
                 ),
             )
+
+    def claimed_release_ids(self, *, shelf: str) -> set[str]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT DISTINCT release_id FROM shelf_leg
+                WHERE source = ? AND shelf = ? AND release_id IS NOT NULL
+                  AND status IN ('complete', 'dispatched', 'owned')
+                """,
+                (GOODREADS_SOURCE, shelf),
+            ).fetchall()
+        return {str(row[0]) for row in rows if row[0]}
 
     def reset_preview(self, *, shelf: str, item_id: str, book_format: str) -> None:
         with self._connection() as connection:
@@ -599,7 +620,7 @@ class ShelfJournal:
                 SELECT i.item_id, i.title, i.author, l.format, l.status, l.last_error
                 FROM shelf_leg l JOIN shelf_item i USING(source, shelf, item_id)
                 WHERE l.source = ? AND l.shelf = ? AND i.active = 1
-                  AND l.status IN ('needs_choice', 'error', 'uncertain')
+                  AND l.status IN ('needs_choice', 'error', 'uncertain', 'quarantined')
                 ORDER BY l.updated_at DESC LIMIT ?
                 """,
                 (GOODREADS_SOURCE, shelf, max(0, int(review_limit))),
@@ -666,6 +687,13 @@ class GoodreadsShelfService:
                 "author": item.get("author"),
                 "isbn": item.get("isbn"),
                 "isbn13": item.get("isbn13"),
+            },
+            "_internal": {
+                "blocked_release_ids": sorted(
+                    self.journal.claimed_release_ids(
+                        shelf=self.section.get("shelf") or "to-read"
+                    )
+                )
             },
         }
         return run_workflow(
@@ -792,6 +820,15 @@ class GoodreadsShelfService:
         decision = result.get("decision") or {}
         dispatch = (result.get("dispatch") or {}).get("prowlarr") or {}
         candidates = (result.get("work") or {}).get("candidates") or []
+        selected = (result.get("work") or {}).get("selected") or {}
+        raw_selected = (
+            selected.get("_raw") if isinstance(selected.get("_raw"), dict) else {}
+        )
+        release_id = _clean(
+            selected.get("guid")
+            or raw_selected.get("guid")
+            or selected.get("download_url")
+        ) or None
         if dry_run:
             outcome = "error" if error or decision.get("status") == "error" else "previewed"
             self.journal.reset_preview(
@@ -815,8 +852,9 @@ class GoodreadsShelfService:
                 shelf=shelf,
                 item_id=item["item_id"],
                 book_format=book_format,
-                status="complete",
+                status="dispatched",
                 run_id=run_id,
+                release_id=release_id,
             )
             return "downloaded"
         if decision.get("status") == "owned":
@@ -838,13 +876,18 @@ class GoodreadsShelfService:
                 error="multiple or low-confidence candidates require review",
             )
             return "needs_choice"
+        duplicate = decision.get("status") == "duplicate_release"
         self.journal.set_outcome(
             shelf=shelf,
             item_id=item["item_id"],
             book_format=book_format,
             status="not_found",
             run_id=run_id,
-            error="no matching release found",
+            error=(
+                "release already dispatched for another format leg"
+                if duplicate
+                else "no matching release found"
+            ),
             retry_at=self._retry_at(int(item["attempt_count"]) + 1),
         )
         return "not_found"

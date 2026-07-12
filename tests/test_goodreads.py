@@ -154,7 +154,7 @@ class GoodreadsShelfServiceTests(TestCase):
         self.assertEqual(first["downloaded"], 2)
         self.assertEqual(second["attempted"], 0)
         self.assertEqual({call[1] for call in calls}, {"ebook", "audiobook"})
-        self.assertEqual(status["counts"]["complete"], {"audiobook": 1, "ebook": 1})
+        self.assertEqual(status["counts"]["dispatched"], {"audiobook": 1, "ebook": 1})
 
     def test_reconcile_inventory_marks_owned_without_running_pipeline(self) -> None:
         with TemporaryDirectory() as directory:
@@ -293,7 +293,7 @@ class GoodreadsShelfServiceTests(TestCase):
             )
         self.assertEqual(choices, [2])
         self.assertEqual(result["outcome"], "downloaded")
-        self.assertEqual(result["state"]["counts"]["complete"], {"ebook": 1})
+        self.assertEqual(result["state"]["counts"]["dispatched"], {"ebook": 1})
 
     def test_cli_exposes_sync_status_and_retry(self) -> None:
         parser = build_parser()

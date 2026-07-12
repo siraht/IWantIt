@@ -2,10 +2,101 @@ from unittest import TestCase
 
 from iwantit.config import default_config
 from iwantit.pipeline import Context
-from iwantit.steps.builtin import book_decide, decide, prowlarr_grab, rank_releases
+from iwantit.steps.builtin import (
+    book_decide,
+    decide,
+    dedupe_book_release,
+    prowlarr_grab,
+    rank_releases,
+)
 
 
 class BookWorkflowTests(TestCase):
+    def test_requested_format_is_fail_closed(self) -> None:
+        config = default_config()
+        context = Context(config=config, state_path="", dry_run=True)
+        data = {
+            "request": {"preferences": {"book_format": "ebook"}},
+            "work": {
+                "media_type": "book",
+                "title": "Example",
+                "candidates": [{"title": "Example Audiobook M4B"}],
+            },
+        }
+        result = book_decide(data, {}, context)
+        self.assertEqual(result["work"]["candidates"], [])
+
+    def test_categories_classify_an_unlabelled_release(self) -> None:
+        config = default_config()
+        context = Context(config=config, state_path="", dry_run=True)
+        data = {
+            "request": {"preferences": {"book_format": "audiobook"}},
+            "work": {
+                "media_type": "book",
+                "candidates": [{"title": "Example by Author", "categories": [{"id": 3030}]}],
+            },
+        }
+        result = book_decide(data, {}, context)
+        self.assertEqual(len(result["work"]["candidates"]), 1)
+
+    def test_english_request_rejects_cyrillic_release(self) -> None:
+        config = default_config()
+        context = Context(config=config, state_path="", dry_run=True)
+        data = {
+            "request": {"query": "Shantaram", "preferences": {"book_format": "ebook"}},
+            "work": {
+                "media_type": "book",
+                "title": "Shantaram",
+                "candidates": [{"title": "Робертс Грегори Шантарам EPUB"}],
+            },
+        }
+        result = book_decide(data, {}, context)
+        self.assertEqual(result["work"]["candidates"], [])
+
+    def test_music_only_indexer_is_blocked_for_books(self) -> None:
+        config = default_config()
+        data = {
+            "request": {"query": "Example", "preferences": {"book_format": "audiobook"}},
+            "work": {
+                "media_type": "book",
+                "candidates": [
+                    {"title": "Example Audiobook M4B", "indexer": "Redacted"},
+                    {"title": "Example Audiobook M4B", "indexer": "MyAnonamouse"},
+                ],
+            },
+        }
+        result = book_decide(data, {}, Context(config=config, state_path=""))
+        self.assertEqual([item["indexer"] for item in result["work"]["candidates"]], ["MyAnonamouse"])
+
+    def test_release_dedupe_blocks_other_format_leg(self) -> None:
+        config = default_config()
+        data = {
+            "_internal": {"blocked_release_ids": ["same-guid"]},
+            "work": {
+                "media_type": "book",
+                "selected": {"guid": "same-guid", "title": "Example EPUB"},
+            },
+        }
+        result = dedupe_book_release(data, {}, Context(config=config, state_path=""))
+        self.assertEqual(result["decision"]["status"], "duplicate_release")
+
+    def test_requested_leg_controls_download_client(self) -> None:
+        config = default_config()
+        config["prowlarr"]["download_clients"]["book"] = {"ebook": 20, "audiobook": 21}
+        data = {
+            "request": {"media_type": "book", "preferences": {"book_format": "audiobook"}},
+            "work": {
+                "media_type": "book",
+                "selected": {"title": "Unlabelled Release", "guid": "g", "indexer_id": 1},
+            },
+        }
+        result = prowlarr_grab(
+            data,
+            config["steps"]["prowlarr_grab"],
+            Context(config=config, state_path="", dry_run=True),
+        )
+        self.assertEqual(result["dispatch"]["prowlarr"]["request"]["json"]["downloadClientId"], 21)
+
     def test_selects_best_ebook_and_audiobook(self) -> None:
         config = default_config()
         context = Context(config=config, state_path="", dry_run=True)

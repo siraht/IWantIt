@@ -2441,11 +2441,12 @@ def _download_client_ref_for_selection(
     selected: dict[str, Any],
     media_type: str | None,
     prow_cfg: dict[str, Any],
+    requested_book_format: str | None = None,
 ) -> Any:
     download_clients = prow_cfg.get("download_clients", {})
     media_ref = _select_media_mapping(download_clients, media_type)
     if isinstance(media_ref, dict) and media_type == "book":
-        fmt = _book_format_for_candidate(selected)
+        fmt = requested_book_format or _book_format_for_candidate(selected)
         if fmt and fmt in media_ref:
             return media_ref.get(fmt)
         return media_ref.get("default")
@@ -2810,6 +2811,11 @@ def rank_releases(
             reasons.append("recommendation")
 
         source_priority = rules.get("source_priority") or []
+        if media_type == "book":
+            requested_format = str(preferences.get("book_format") or "").casefold()
+            by_format = rules.get("source_priority_by_format") or {}
+            if isinstance(by_format, dict) and isinstance(by_format.get(requested_format), list):
+                source_priority = by_format[requested_format]
         if isinstance(source_priority, list) and source_priority:
             source_text = " ".join(
                 [
@@ -2913,11 +2919,20 @@ def prowlarr_grab(
         work["selected_items"] = normalized_selections
 
     media_type = work.get("media_type") or data.get("request", {}).get("media_type")
+    requested_book_format = None
+    if media_type == "book":
+        requested_book_format = str(
+            ((data.get("request") or {}).get("preferences") or {}).get("book_format") or ""
+        ).casefold()
+        if requested_book_format not in {"ebook", "audiobook"}:
+            requested_book_format = None
     prow_cfg = context.config.get("prowlarr", {})
     if media_type and not work.get("download_client_id"):
         _set_download_client(
             work,
-            _download_client_ref_for_selection(normalized_selections[0], media_type, prow_cfg),
+            _download_client_ref_for_selection(
+                normalized_selections[0], media_type, prow_cfg, requested_book_format
+            ),
             context,
             prow_cfg,
         )
@@ -2939,7 +2954,9 @@ def prowlarr_grab(
         previous = work.get("selected")
         previous_client_id = work.get("download_client_id")
         previous_client_name = work.get("download_client_name")
-        client_ref = _download_client_ref_for_selection(selected, media_type, prow_cfg)
+        client_ref = _download_client_ref_for_selection(
+            selected, media_type, prow_cfg, requested_book_format
+        )
         if client_ref is not None:
             _set_download_client(work, client_ref, context, prow_cfg)
         work["selected"] = selected
@@ -3521,15 +3538,49 @@ def book_decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context
 
     def detect_formats(candidate: dict[str, Any]) -> set[str]:
         text = _get_candidate_text(candidate, title_fields).lower()
-        return _book_format_labels(text)
+        formats = _book_format_labels(text)
+        categories = _extract_category_ids(candidate)
+        if 3030 in categories:
+            formats.add("audiobook")
+        if any(category == 7000 or 7020 <= category <= 7040 for category in categories):
+            formats.add("ebook")
+        return formats
+
+    request_text = " ".join(
+        str(value or "")
+        for value in (request.get("query"), request.get("input"), work.get("title"))
+    )
+    allow_cyrillic = bool(re.search(r"[\u0400-\u04ff]", request_text))
 
     enriched: list[dict[str, Any]] = []
+    blocked_indexers = {
+        str(value).casefold()
+        for value in ((context.config.get("book") or {}).get("blocked_indexers") or [])
+    }
     for cand in candidates:
         if isinstance(cand, dict):
             candidate = dict(cand)
         else:
             candidate = {"title": str(cand)}
+        source_name = " ".join(
+            str(value or "")
+            for value in (
+                candidate.get("indexer"),
+                (candidate.get("_raw") or {}).get("indexer")
+                if isinstance(candidate.get("_raw"), dict)
+                else "",
+            )
+        ).casefold()
+        if any(blocked in source_name for blocked in blocked_indexers):
+            continue
         formats = detect_formats(candidate)
+        candidate_text = _get_candidate_text(candidate, title_fields)
+        if not allow_cyrillic and (
+            re.search(r"[\u0400-\u04ff]", candidate_text)
+            or re.search(r"(?i)\b(rus|russian|ru)\b", candidate_text)
+        ):
+            candidate.setdefault("derived", {})["language_rejected"] = True
+            continue
         if formats:
             derived = candidate.get("derived")
             if isinstance(derived, dict):
@@ -3566,7 +3617,9 @@ def book_decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context
     if matched:
         work["candidates"] = matched
     else:
-        work["candidates"] = enriched
+        # Format is a hard safety boundary. Never satisfy an ebook request with
+        # audio (or vice versa) merely because search returned something.
+        work["candidates"] = []
     data["work"] = work
     return data
 
@@ -3820,8 +3873,42 @@ def filter_owned(data: dict[str, Any], step_cfg: dict[str, Any], context: Contex
     return data
 
 
+def dedupe_book_release(
+    data: dict[str, Any], step_cfg: dict[str, Any], context: Context
+) -> dict[str, Any]:
+    """Prevent one release GUID from being dispatched for multiple format legs."""
+    work = data.get("work") or {}
+    if work.get("media_type") != "book":
+        return data
+    selected = work.get("selected_items") or [work.get("selected")]
+    blocked = {
+        str(value)
+        for value in ((data.get("_internal") or {}).get("blocked_release_ids") or [])
+        if value
+    }
+    release_ids = set()
+    for item in selected:
+        if not isinstance(item, dict):
+            continue
+        raw = item.get("_raw") if isinstance(item.get("_raw"), dict) else {}
+        release_id = item.get("guid") or raw.get("guid") or item.get("download_url")
+        if release_id:
+            release_ids.add(str(release_id))
+    duplicate = sorted(release_ids.intersection(blocked))
+    if duplicate:
+        work.pop("selected", None)
+        work.pop("selected_items", None)
+        data["work"] = work
+        data["decision"] = {
+            "status": "duplicate_release",
+            "reason": "release already dispatched for another format leg",
+        }
+    return data
+
+
 BUILTINS = {
     "filter_owned": filter_owned,
+    "dedupe_book_release": dedupe_book_release,
     "identify": identify,
     "identify_web_search": identify_web_search,
     "determine_media_type": determine_media_type,

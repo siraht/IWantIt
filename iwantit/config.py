@@ -73,6 +73,7 @@ def default_config() -> dict[str, Any]:
                     "book_decide",
                     "rank_releases",
                     "decide",
+                    "dedupe_book_release",
                     "prowlarr_grab",
                 ],
             },
@@ -150,6 +151,7 @@ def default_config() -> dict[str, Any]:
                 "retry_backoff_seconds": 0.5,
             },
             "filter_owned": {"builtin": "filter_owned"},
+            "dedupe_book_release": {"builtin": "dedupe_book_release"},
             "filter_candidates": {
                 "builtin": "filter_candidates",
                 "allow_missing_categories": False,
@@ -161,7 +163,7 @@ def default_config() -> dict[str, Any]:
                 "builtin": "filter_match",
                 "min_match_ratio": {
                     "default": 0.4,
-                    "book": 0.25,
+                    "book": 0.55,
                 },
                 "min_token_matches": 2,
                 "keep_original_on_empty": False,
@@ -371,6 +373,17 @@ def default_config() -> dict[str, Any]:
         "book": {
             "default_format": "both",
             "auto_select_each_format": True,
+            "blocked_indexers": ["redacted"],
+        },
+        "book_processing": {
+            "enabled": False,
+            "ssh_host": None,
+            "ebook_root": None,
+            "audiobook_root": None,
+            "ebook_ingest_root": None,
+            "state_path": None,
+            "min_mtime_epoch": 0,
+            "timeout": 600,
         },
         "library_catalogs": {
             "require_coverage": False,
@@ -436,8 +449,16 @@ def default_config() -> dict[str, Any]:
                     "indexer",
                     "_raw.indexer",
                 ],
-                "source_priority": ["myanonamouse", "mam"],
+                "source_priority": ["myanonamouse"],
+                "source_priority_by_format": {
+                    "ebook": ["myanonamouse", "alpharatio", "pretome", "rutracker"],
+                    "audiobook": ["myanonamouse", "audionews", "bitspyder", "rutracker"],
+                },
                 "source_priority_weight": 120,
+                "reject": [
+                    r"(?i)\b(collection|bundle|box[ ._-]?set|omnibus|retail[ ._-]?pack)\b",
+                    r"(?i)\b(rus|russian)\b",
+                ],
                 "score": [
                     {"match": r"(?i)\bk(?:e)?pub\b", "score": 72, "label": "KEPUB"},
                     {"match": r"(?i)\bepub\b", "score": 70, "label": "EPUB"},
@@ -621,6 +642,7 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     # configs gain safety gates without rewriting their private files.
     steps = dict(merged.get("steps", {}) or {})
     steps.setdefault("filter_owned", {"builtin": "filter_owned"})
+    steps.setdefault("dedupe_book_release", {"builtin": "dedupe_book_release"})
     merged["steps"] = steps
     for workflow in merged.get("workflows", []) or []:
         if workflow.get("name") != "book":
@@ -632,7 +654,13 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
             except ValueError:
                 index = 0
             workflow_steps.insert(index, "filter_owned")
-            workflow["steps"] = workflow_steps
+        if "dedupe_book_release" not in workflow_steps:
+            try:
+                index = workflow_steps.index("prowlarr_grab")
+            except ValueError:
+                index = len(workflow_steps)
+            workflow_steps.insert(index, "dedupe_book_release")
+        workflow["steps"] = workflow_steps
     plugin_steps, plugin_meta = discover_plugins(merged, Path.cwd())
     if plugin_steps:
         merged_steps = dict(merged.get("steps", {}) or {})

@@ -12,6 +12,12 @@ STEP_METADATA: dict[str, dict[str, Any]] = {
         "emits": ["ownership", "decision.status"],
         "description": "Stop book acquisition when a configured library catalog owns it.",
     },
+    "dedupe_book_release": {
+        "side_effect": False,
+        "requires": ["work.selected"],
+        "emits": ["decision.status"],
+        "description": "Reject a release already dispatched for another book format leg.",
+    },
     "ocr": {
         "side_effect": False,
         "requires": ["request.image_path"],

@@ -78,13 +78,16 @@ States are:
 - `baseline`: known from the initial CSV, not queued
 - `pending`: ready for acquisition
 - `in_progress`: leased by a sync process
-- `complete`: successfully sent to Prowlarr and never selected again
+- `dispatched`: successfully sent to Prowlarr; catalog reconciliation later promotes it to `owned`
+- `complete`: legacy name for pre-migration dispatched entries
 - `owned`: matched in the existing ebook/audiobook inventory; never searched or grabbed
 - `not_found`: no release available; retried with exponential backoff
 - `error`: provider or pipeline failure; retried with exponential backoff
 - `needs_choice`: ambiguous result held for manual review, not automatically retried
 - `uncertain`: a process exited during acquisition; never retried automatically because
   Prowlarr's grab endpoint has no idempotency key
+- `quarantined`: a legacy or post-processed release failed format, language,
+  integrity, or ownership validation; never retried automatically
 
 Inspect errors and ambiguous entries with `iwantit shelf status`. Reset failed and
 unavailable entries immediately with:

@@ -40,6 +40,7 @@ def config_schema() -> dict[str, Any]:
                     },
                 },
             },
+            "book_processing": {"type": "object", "additionalProperties": True},
             "default_workflow": {"type": "string"},
             "workflows": {
                 "type": "array",

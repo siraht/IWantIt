@@ -22,6 +22,7 @@ from .config import (
 )
 from .goodreads import GoodreadsError, GoodreadsShelfService, configured_formats
 from .catalogs import BookIdentity, CatalogError, LibraryCatalogService
+from .book_processing import BookProcessingError, RemoteBookProcessor
 from .registry import provider_required_keys
 from .step_metadata import STEP_METADATA
 from .pipeline import Context, run_workflow
@@ -1016,6 +1017,17 @@ def cmd_catalog_owned(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_books_normalize(args: argparse.Namespace) -> int:
+    try:
+        config = load_config(ensure_config_exists(args.config))
+        result = RemoteBookProcessor(config).run(apply=args.apply)
+    except (BookProcessingError, OSError, ValueError) as exc:
+        write_json({"status": "error", "error": {"message": _safe_error_message(exc)}})
+        return 1
+    write_json(result)
+    return 0
+
+
 def _check_service(name: str, url: str, headers: dict[str, str] | None, timeout: float = 5.0) -> tuple[bool, str]:
     try:
         response = requests.get(url, headers=headers, timeout=timeout)
@@ -1402,6 +1414,16 @@ def build_parser() -> argparse.ArgumentParser:
     catalog_match.add_argument("--asin")
     catalog_match.add_argument("--media-type", choices=["ebook", "audiobook"], required=True)
     catalog_match.set_defaults(func=cmd_catalog_match)
+
+    books_cmd = sub.add_parser("books", help="Normalize downloaded book releases")
+    books_sub = books_cmd.add_subparsers(dest="books_command", required=True)
+    books_normalize = books_sub.add_parser(
+        "normalize", parents=[common], help="Audit or normalize downloaded book releases"
+    )
+    books_normalize.add_argument(
+        "--apply", action="store_true", help="Copy validated outputs into ingest libraries"
+    )
+    books_normalize.set_defaults(func=cmd_books_normalize)
 
     choose_group = argparse.ArgumentParser(add_help=False)
     choose_source = choose_group.add_mutually_exclusive_group()

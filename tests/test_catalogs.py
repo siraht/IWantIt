@@ -36,7 +36,8 @@ class CatalogMatchingTests(TestCase):
             )
             config = load_config(path)
         self.assertEqual(
-            config["workflows"][0]["steps"], ["filter_owned", "prowlarr_search"]
+            config["workflows"][0]["steps"],
+            ["filter_owned", "prowlarr_search", "dedupe_book_release"],
         )
 
     def test_identifier_match_has_priority(self) -> None:
