@@ -95,7 +95,7 @@ def extract_release(release):
         groups = {safe_name(p.stem).casefold() for p in outputs}
         if not outputs:
             raise ValueError("archive contains no valid ebook")
-        if len(groups) > 3:
+        if len(groups) > 1:
             raise ValueError("archive appears to contain a multi-book collection")
         copied = []
         if apply_changes:
@@ -142,6 +142,11 @@ for release in sorted(ebook_root.iterdir() if ebook_root.is_dir() else []):
     try:
         if re.search(r"[\u0400-\u04ff]", str(release)):
             raise ValueError("foreign-language release requires review")
+        direct_groups = {safe_name(path.stem).casefold() for path in direct_ebooks}
+        if audio_files and direct_ebooks:
+            raise ValueError("release mixes ebook and audiobook payloads")
+        if len(direct_groups) > 1:
+            raise ValueError("release appears to contain a multi-book collection")
         if audio_files and not direct_ebooks:
             outputs = copy_audio_release(release, audio_files)
             action = "audio_recovered"

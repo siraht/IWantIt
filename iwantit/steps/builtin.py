@@ -3551,12 +3551,22 @@ def book_decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context
         for value in (request.get("query"), request.get("input"), work.get("title"))
     )
     allow_cyrillic = bool(re.search(r"[\u0400-\u04ff]", request_text))
+    allowed_languages = {
+        str(value).casefold()
+        for value in ((context.config.get("book") or {}).get("allowed_languages") or [])
+    }
+    language_aliases = {
+        "eng": "eng", "english": "eng", "rus": "rus", "russian": "rus",
+        "ger": "ger", "german": "ger", "deu": "ger", "fre": "fre",
+        "french": "fre", "fra": "fre", "spa": "spa", "spanish": "spa",
+        "ita": "ita", "italian": "ita",
+    }
+    normalized_allowed = {language_aliases.get(value, value) for value in allowed_languages}
 
     enriched: list[dict[str, Any]] = []
-    blocked_indexers = {
-        str(value).casefold()
-        for value in ((context.config.get("book") or {}).get("blocked_indexers") or [])
-    }
+    indexer_capabilities = (
+        (context.config.get("book") or {}).get("indexer_format_capabilities") or {}
+    )
     for cand in candidates:
         if isinstance(cand, dict):
             candidate = dict(cand)
@@ -3571,13 +3581,32 @@ def book_decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context
                 else "",
             )
         ).casefold()
-        if any(blocked in source_name for blocked in blocked_indexers):
-            continue
         formats = detect_formats(candidate)
+        allowed_formats = None
+        if isinstance(indexer_capabilities, dict):
+            for indexer_name, configured_formats in indexer_capabilities.items():
+                if str(indexer_name).casefold() in source_name:
+                    allowed_formats = {
+                        str(value).casefold() for value in (configured_formats or [])
+                    }
+                    break
+        if allowed_formats is not None and (
+            not formats.intersection(allowed_formats)
+            or not desired.intersection(allowed_formats)
+        ):
+            continue
         candidate_text = _get_candidate_text(candidate, title_fields)
+        explicit_languages = {
+            language_aliases[token.casefold()]
+            for token in re.findall(
+                r"(?i)(?:^|[\[\]() _.-])(eng|english|rus|russian|ger|german|deu|fre|french|fra|spa|spanish|ita|italian)(?=$|[\[\]() _.-])",
+                candidate_text,
+            )
+        }
         if not allow_cyrillic and (
             re.search(r"[\u0400-\u04ff]", candidate_text)
             or re.search(r"(?i)\b(rus|russian|ru)\b", candidate_text)
+            or (explicit_languages and explicit_languages.isdisjoint(normalized_allowed))
         ):
             candidate.setdefault("derived", {})["language_rejected"] = True
             continue

@@ -13,9 +13,11 @@ remain unavailable instead of falling back to the wrong format.
 
 Ranking is format-specific. Ebooks prefer MyAnonamouse, AlphaRatio, PreToMe,
 then RuTracker; audiobooks prefer MyAnonamouse, AudioNews, Bitspyder, then
-RuTracker. Redacted is blocked for book acquisition because it is a music source.
-Collections, bundles, box sets, omnibuses, retail packs, and explicit Russian
-releases are rejected by the default book quality rules.
+RuTracker. Redacted has no priority bonus and is capability-limited to explicitly
+validated audiobook releases; it can never supply an ebook or an unclassified
+book result. Explicit Russian releases are rejected by the default book rules.
+Collection-like titles are not rejected by name alone: the normalizer inspects
+their payload and quarantines archives containing multiple distinct books.
 
 `iwantit books normalize` audits downloaded releases without writing. Add
 `--apply` to copy validated outputs into the configured ingest roots. Source files

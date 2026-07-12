@@ -373,7 +373,10 @@ def default_config() -> dict[str, Any]:
         "book": {
             "default_format": "both",
             "auto_select_each_format": True,
-            "blocked_indexers": ["redacted"],
+            "indexer_format_capabilities": {
+                "redacted": ["audiobook"],
+            },
+            "allowed_languages": ["eng", "english"],
         },
         "book_processing": {
             "enabled": False,
@@ -456,7 +459,6 @@ def default_config() -> dict[str, Any]:
                 },
                 "source_priority_weight": 120,
                 "reject": [
-                    r"(?i)\b(collection|bundle|box[ ._-]?set|omnibus|retail[ ._-]?pack)\b",
                     r"(?i)\b(rus|russian)\b",
                 ],
                 "score": [

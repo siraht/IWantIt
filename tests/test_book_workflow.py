@@ -53,20 +53,52 @@ class BookWorkflowTests(TestCase):
         result = book_decide(data, {}, context)
         self.assertEqual(result["work"]["candidates"], [])
 
-    def test_music_only_indexer_is_blocked_for_books(self) -> None:
+    def test_english_request_rejects_explicit_foreign_language_tag(self) -> None:
         config = default_config()
         data = {
+            "request": {"query": "Example", "preferences": {"book_format": "ebook"}},
+            "work": {
+                "media_type": "book",
+                "title": "Example",
+                "candidates": [{"title": "Example [French EPUB]"}],
+            },
+        }
+        result = book_decide(data, {}, Context(config=config, state_path=""))
+        self.assertEqual(result["work"]["candidates"], [])
+
+    def test_redacted_is_capability_limited_to_explicit_audiobooks(self) -> None:
+        config = default_config()
+        audiobook = {
             "request": {"query": "Example", "preferences": {"book_format": "audiobook"}},
             "work": {
                 "media_type": "book",
                 "candidates": [
                     {"title": "Example Audiobook M4B", "indexer": "Redacted"},
-                    {"title": "Example Audiobook M4B", "indexer": "MyAnonamouse"},
                 ],
             },
         }
-        result = book_decide(data, {}, Context(config=config, state_path=""))
-        self.assertEqual([item["indexer"] for item in result["work"]["candidates"]], ["MyAnonamouse"])
+        result = book_decide(audiobook, {}, Context(config=config, state_path=""))
+        self.assertEqual([item["indexer"] for item in result["work"]["candidates"]], ["Redacted"])
+
+        ebook = {
+            "request": {"query": "Example", "preferences": {"book_format": "ebook"}},
+            "work": {
+                "media_type": "book",
+                "candidates": [{"title": "Example EPUB", "indexer": "Redacted"}],
+            },
+        }
+        result = book_decide(ebook, {}, Context(config=config, state_path=""))
+        self.assertEqual(result["work"]["candidates"], [])
+
+        unclassified = {
+            "request": {"query": "Example", "preferences": {"book_format": "audiobook"}},
+            "work": {
+                "media_type": "book",
+                "candidates": [{"title": "Example", "indexer": "Redacted"}],
+            },
+        }
+        result = book_decide(unclassified, {}, Context(config=config, state_path=""))
+        self.assertEqual(result["work"]["candidates"], [])
 
     def test_release_dedupe_blocks_other_format_leg(self) -> None:
         config = default_config()
