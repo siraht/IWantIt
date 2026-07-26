@@ -12,7 +12,14 @@ from urllib.parse import urlparse
 
 import requests
 
-from .acquisition import ACQUISITION_INTENT_SCHEMA, AcquisitionContractError, AcquisitionService
+from .acquisition import (
+    ACQUISITION_INTENT_SCHEMA,
+    AcquisitionContractError,
+    AcquisitionService,
+)
+from .curated_acquisition_schema import (
+    ACQUISITION_INTENT_SCHEMA as CURATED_ACQUISITION_INTENT_SCHEMA,
+)
 from .config import (
     ensure_config_exists,
     load_config,
@@ -653,12 +660,28 @@ def cmd_step(args: argparse.Namespace) -> int:
 
 
 def cmd_acquire(args: argparse.Namespace) -> int:
+    if args.capabilities:
+        config = load_config(ensure_config_exists(args.config))
+        write_json(AcquisitionService(config, BUILTINS).capabilities())
+        return 0
     if args.schema:
-        write_json(ACQUISITION_INTENT_SCHEMA)
+        write_json(
+            CURATED_ACQUISITION_INTENT_SCHEMA
+            if args.schema_version == "2"
+            else ACQUISITION_INTENT_SCHEMA
+        )
         return 0
     try:
         payload = _load_payload(args)
         if args.confirm:
+            if (
+                not isinstance(payload, dict)
+                or payload.get("schema") != "iwantit.acquisition-intent/1"
+            ):
+                raise AcquisitionContractError(
+                    "--confirm is legacy v1 only; v2 requires an item-bound "
+                    "retained choice and confirmation"
+                )
             payload["action"] = "dispatch"
             payload.setdefault("confirmation", {})["approved"] = True
         config = load_config(ensure_config_exists(args.config))
@@ -677,7 +700,7 @@ def cmd_acquire(args: argparse.Namespace) -> int:
         return EXIT_CONFIRMATION_REQUIRED
     if result["status"] == "needs_choice":
         return EXIT_NEEDS_CHOICE
-    return 1 if result["status"] == "error" else 0
+    return 1 if result["status"] in {"error", "partial", "refused"} else 0
 
 
 def _goodreads_service(args: argparse.Namespace) -> tuple[GoodreadsShelfService, dict[str, Any]]:
@@ -1335,9 +1358,23 @@ def build_parser() -> argparse.ArgumentParser:
     acquire_source.add_argument("--stdin", action="store_true", help="Read intent JSON from stdin")
     acquire_cmd.add_argument("--schema", action="store_true", help="Print the intent JSON Schema")
     acquire_cmd.add_argument(
+        "--schema-version",
+        choices=["1", "2"],
+        default="2",
+        help="Intent schema major to print with --schema (default: 2)",
+    )
+    acquire_cmd.add_argument(
+        "--capabilities",
+        action="store_true",
+        help="Print supported contracts, limits, pairing, replay, and cancellation capabilities",
+    )
+    acquire_cmd.add_argument(
         "--confirm",
         action="store_true",
-        help="Approve and dispatch the intent (side effects allowed)",
+        help=(
+            "Approve legacy v1 only; v2 requires item-bound selection and "
+            "confirmation in the JSON contract"
+        ),
     )
     acquire_cmd.set_defaults(func=cmd_acquire)
 

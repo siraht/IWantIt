@@ -15,6 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import requests
 
+from ..acquisition_candidate import candidate_reference
 from ..canonical import canonical_schema, merge_from_work, set_field
 from ..pipeline import Context, render_template
 from ..private_adapters import (
@@ -1493,9 +1494,40 @@ def determine_media_type(
     return data
 
 
+def _acquisition_provider_allowed(request: dict[str, Any], provider: str) -> bool:
+    allowed = request.get("allowed_acquisition_providers")
+    excluded = request.get("excluded_acquisition_providers") or []
+    normalized = "soulseek" if provider == "slskd" else provider.lower()
+    allowed_names = (
+        {
+            "soulseek" if str(value).lower() == "slskd" else str(value).lower()
+            for value in allowed
+        }
+        if isinstance(allowed, list)
+        else set()
+    )
+    excluded_names = (
+        {
+            "soulseek" if str(value).lower() == "slskd" else str(value).lower()
+            for value in excluded
+        }
+        if isinstance(excluded, list)
+        else set()
+    )
+    return (not allowed_names or normalized in allowed_names) and normalized not in excluded_names
+
+
 def prowlarr_search(
     data: dict[str, Any], step_cfg: dict[str, Any], context: Context
 ) -> dict[str, Any]:
+    request = data.setdefault("request", {})
+    if not _acquisition_provider_allowed(request, "prowlarr"):
+        data.setdefault("search", {})["prowlarr"] = {
+            "query": "",
+            "count": 0,
+            "error_type": "NotRequested",
+        }
+        return data
     if not private_execution_allowed(context.config, "prowlarr"):
         data.setdefault("search", {})["prowlarr"] = {
             "query": "",
@@ -1503,7 +1535,6 @@ def prowlarr_search(
             "error_type": "ConnectorDisabled",
         }
         return data
-    request = data.setdefault("request", {})
     work = data.setdefault("work", {})
     media_type = request.get("media_type") or work.get("media_type")
     if media_type and not work.get("media_type"):
@@ -1644,9 +1675,16 @@ def prowlarr_search(
 def _private_adapter_search(
     data: dict[str, Any], step_cfg: dict[str, Any], context: Context, provider: str
 ) -> dict[str, Any]:
+    request = data.setdefault("request", {})
+    if not _acquisition_provider_allowed(request, provider):
+        data.setdefault("search", {})[provider] = {
+            "query": "",
+            "count": 0,
+            "error_type": "NotRequested",
+        }
+        return data
     if not connector_enabled(context.config, provider):
         return data
-    request = data.setdefault("request", {})
     work = data.setdefault("work", {})
     media_type = request.get("media_type") or work.get("media_type")
     if media_type not in {"music", "book"} or (provider == "soulseek" and media_type != "music"):
@@ -1707,7 +1745,43 @@ def filter_candidates(
     if not candidates:
         return data
 
-    media_type = work.get("media_type") or data.get("request", {}).get("media_type")
+    request = data.get("request", {})
+    requested_allowed = request.get("allowed_acquisition_providers")
+    requested_excluded = request.get("excluded_acquisition_providers") or []
+    if isinstance(requested_allowed, list) or isinstance(requested_excluded, list):
+        allowed_names = (
+            {str(value).lower() for value in requested_allowed}
+            if isinstance(requested_allowed, list)
+            else set()
+        )
+        excluded_names = {
+            str(value).lower()
+            for value in requested_excluded
+            if isinstance(value, str)
+        }
+        before = len(candidates)
+        candidates = [
+            candidate
+            for candidate in candidates
+            if isinstance(candidate, dict)
+            and (
+                not allowed_names
+                or str(candidate.get("provider") or "prowlarr").lower() in allowed_names
+            )
+            and str(candidate.get("provider") or "prowlarr").lower()
+            not in excluded_names
+        ]
+        if len(candidates) != before:
+            data.setdefault("filter", {})["acquisition_providers"] = {
+                "removed": before - len(candidates),
+                "kept": len(candidates),
+            }
+        work["candidates"] = candidates
+        data["work"] = work
+        if not candidates:
+            return data
+
+    media_type = work.get("media_type") or request.get("media_type")
     categories_cfg = step_cfg.get("categories")
     if categories_cfg is None:
         categories_cfg = (context.config.get("prowlarr", {}) or {}).get("search", {}).get("categories")
@@ -2820,16 +2894,15 @@ def private_source_dispatch(
         return data
     intent = data.get("acquisition_intent") or {}
     intent_id = str(intent.get("intent_id") or data.get("run_id") or "unknown")
-    candidate_material = "|".join(
-        str(value)
-        for value in (
-            selected.get("title"),
-            selected.get("size"),
-            selected.get("guid"),
-            private.get("filename"),
-        )
+    contract_key = str(intent.get("idempotency_key") or intent_id)
+    item_id = str(intent.get("item_id") or "legacy-item")
+    selected_ref = str(
+        data.get("request", {}).get("selected_acquisition_candidate_ref")
+        or candidate_reference(selected)
     )
-    idempotency_key = f"{intent_id}:{hashlib.sha256(candidate_material.encode()).hexdigest()}"
+    idempotency_key = "sha256:" + hashlib.sha256(
+        f"{contract_key}:{item_id}:{selected_ref}".encode()
+    ).hexdigest()
     try:
         adapter = JackettAdapter(context.config) if provider == "jackett" else SoulseekAdapter(context.config)
         result = adapter.dispatch(selected, idempotency_key=idempotency_key)
@@ -2980,6 +3053,50 @@ def decide(data: dict[str, Any], step_cfg: dict[str, Any], context: Context) -> 
                 "min_confidence": min_confidence_val,
             }
         return decision
+
+    requested_candidate_ref = request.get("selected_acquisition_candidate_ref")
+    if requested_candidate_ref:
+        candidates = work.get("candidates", []) or []
+        matching = [
+            candidate
+            for candidate in candidates
+            if isinstance(candidate, dict)
+            and candidate_reference(candidate) == requested_candidate_ref
+        ]
+        if len(matching) != 1:
+            work.pop("selected", None)
+            data["work"] = work
+            data["decision"] = {
+                "status": "error",
+                "reason": "stale_or_ambiguous_acquisition_choice",
+            }
+            data["error"] = {
+                "code": "STALE_PREVIEW_CHOICE",
+                "message": (
+                    "The confirmed candidate no longer matches exactly one current "
+                    "provider result."
+                ),
+                "step": "decide",
+                "type": "AcquisitionChoiceError",
+                "hint": "Request a new preview and confirm a current candidate.",
+            }
+            return data
+        selected = matching[0]
+        index = candidates.index(selected)
+        work["selected"] = selected
+        data["work"] = work
+        data["decision"] = _apply_confidence(
+            {
+                "status": "selected",
+                "selected": selected,
+                "index": index,
+                "reason": "confirmed_candidate_ref",
+            },
+            selected,
+            index,
+            enforce=False,
+        )
+        return data
 
     if preselected is not None:
         index = None

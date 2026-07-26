@@ -1,11 +1,13 @@
+from types import SimpleNamespace
 from unittest import TestCase
+from unittest.mock import patch
 
 from iwantit.acquisition import (
     AcquisitionContractError,
     AcquisitionService,
     sanitize_acquisition_output,
 )
-from iwantit.cli import build_parser
+from iwantit.cli import build_parser, cmd_acquire
 
 
 def intent(action: str = "preview", *, approved: bool = False) -> dict:
@@ -242,3 +244,48 @@ class AcquisitionTests(TestCase):
         self.assertEqual(preview.command, "acquire")
         self.assertFalse(preview.confirm)
         self.assertTrue(dispatch.confirm)
+
+    def test_cli_returns_failure_for_structured_v2_refusal(self) -> None:
+        payload = {"schema": "iwantit.acquisition-intent/99"}
+        args = SimpleNamespace(
+            capabilities=False,
+            schema=False,
+            schema_version="2",
+            confirm=False,
+            config=None,
+        )
+        outputs = []
+        with (
+            patch("iwantit.cli._load_payload", return_value=payload),
+            patch("iwantit.cli.ensure_config_exists", return_value=None),
+            patch("iwantit.cli.load_config", return_value={}),
+            patch("iwantit.cli.write_json", side_effect=outputs.append),
+        ):
+            status = cmd_acquire(args)
+
+        self.assertEqual(status, 1)
+        self.assertEqual(
+            outputs[0]["error"]["code"],
+            "UNSUPPORTED_CONTRACT_VERSION",
+        )
+
+    def test_cli_confirm_flag_cannot_bypass_v2_item_confirmation(self) -> None:
+        args = SimpleNamespace(
+            capabilities=False,
+            schema=False,
+            schema_version="2",
+            confirm=True,
+            config=None,
+        )
+        outputs = []
+        with (
+            patch(
+                "iwantit.cli._load_payload",
+                return_value={"schema": "iwantit.acquisition-intent/2"},
+            ),
+            patch("iwantit.cli.write_json", side_effect=outputs.append),
+        ):
+            status = cmd_acquire(args)
+
+        self.assertEqual(status, 1)
+        self.assertEqual(outputs[0]["error"]["code"], "INVALID_INTENT")

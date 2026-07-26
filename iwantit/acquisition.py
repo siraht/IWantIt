@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import copy
-import hashlib
-import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -12,6 +10,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from jsonschema import Draft202012Validator
 
+from .acquisition_candidate import candidate_reference
 from .acquisition_journal import AcquisitionJournal
 from .pipeline import BuiltinStep, run_workflow
 from .paths import state_dir
@@ -157,7 +156,26 @@ class AcquisitionService:
         else:
             self.journal = None
 
-    def handle(self, intent: dict[str, Any]) -> dict[str, Any]:
+    def handle(self, intent: Any) -> dict[str, Any]:
+        if not isinstance(intent, dict):
+            raise AcquisitionContractError(
+                "acquisition intent must be a JSON object"
+            )
+        schema_id = intent.get("schema")
+        if schema_id == "iwantit.acquisition-intent/2":
+            from .curated_acquisition import CuratedAcquisitionService
+
+            return CuratedAcquisitionService(self).handle(intent)
+        if (
+            isinstance(schema_id, str)
+            and schema_id.startswith("iwantit.acquisition-intent/")
+            and schema_id != INTENT_SCHEMA_ID
+        ):
+            from .curated_acquisition import CuratedAcquisitionService
+
+            return CuratedAcquisitionService(self).refuse_unsupported_contract(
+                intent
+            )
         errors = sorted(
             Draft202012Validator(ACQUISITION_INTENT_SCHEMA).iter_errors(intent),
             key=lambda error: list(error.absolute_path),
@@ -220,6 +238,15 @@ class AcquisitionService:
         if action == "dispatch" and self.journal is not None:
             self.journal.finish(str(intent["intent_id"]), result)
         return result
+
+    def capabilities(self) -> dict[str, Any]:
+        from .curated_acquisition import CuratedAcquisitionService
+
+        return CuratedAcquisitionService(self).capabilities()
+
+    @staticmethod
+    def sanitize_result(value: Any) -> Any:
+        return sanitize_acquisition_output(value)
 
     def _pipeline_input(self, intent: dict[str, Any]) -> dict[str, Any]:
         recording = intent["recording"]
@@ -427,11 +454,9 @@ class AcquisitionService:
             "availability": availability,
             "ranking": ranking,
         }
-        digest_payload = json.dumps(projected, sort_keys=True, separators=(",", ":"))
         return {
             **projected,
-            "candidate_ref": "sha256:"
-            + hashlib.sha256(digest_payload.encode("utf-8")).hexdigest(),
+            "candidate_ref": candidate_reference(candidate),
         }
 
     @staticmethod
