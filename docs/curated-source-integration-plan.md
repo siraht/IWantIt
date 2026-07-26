@@ -124,11 +124,11 @@ Compatibility rules:
 |---|---|---|---|
 | I0 baseline, Beads, plan | `iwantit-ztl.1` | Complete | `d90f0c19ac2a91491d2935a3bb7eb06fdcb5b502` |
 | I1 contract hardening | `iwantit-ztl.2` | Complete | `5d07a55af4415552ecd8f61bc7cc4fb9837fad9f`; 55 scoped and 99 full tests |
-| I2 MetaMusic/ERR fixtures | `iwantit-ztl.3` | In progress | Canonical positive/negative fixtures and consumer conformance pending |
+| I2 MetaMusic/ERR fixtures | `iwantit-ztl.3` | Complete | `7331764c2af1affa1d979f980f14067452201fba`; 5 schemas, 41 fixtures, 18 scenarios, 4 replay pairs |
 | I3 comment-ranking retirement | `iwantit-ztl.4` | Complete | `96ed44581efc0448bdbdf42a57e50f3a13452418`; 3 policy tests |
-| I4 release gate | `iwantit-ztl.5` | Pending | Full gates, evidence, Beads close, sync/rebase/push |
-| X6 explicit acquisition | `iwantit-ztl.2/.3/.5` | In progress | Lifecycle implemented; canonical fixtures and retained dogfood pending |
-| X7 IWantIt privacy boundary | `iwantit-ztl.2/.3/.5` | In progress | Contract/journal negative tests pass; fixture and dogfood evidence pending |
+| I4 release gate | `iwantit-ztl.5` | In progress | Tracked dogfood evidence passes; final full gates, Beads close, sync/rebase/push remain |
+| X6 explicit acquisition | `iwantit-ztl.2/.3/.5` | Locally complete; release pending | Lifecycle, canonical fixtures, and real stdio/loopback dogfood pass |
+| X7 IWantIt privacy boundary | `iwantit-ztl.2/.3/.5` | Locally complete; release pending | Refusal, schema, journal, fixture, output, persistence, and dogfood privacy probes pass |
 
 ## Planned implementation slices
 
@@ -205,6 +205,30 @@ IWantIt embeds and separately validates ERR's
 granularity is carried by distinct exact ERR subjects, not a title/artist
 comparison in IWantIt.
 
+### 2026-07-26 — Publish deterministic owner fixtures, not example snippets
+
+The IWantIt schemas and MetaMusic/ERR fixtures are generated from the same
+runtime contract constants and service implementation used by the CLI. A clean
+temporary generation must byte-match the committed JSON before semantic
+validation runs. The corpus includes both successful and refused states,
+side-effect-safe retry, unattested uncertainty, completed replay, cancellation,
+partial batches, pairing/origin failures, and private-evidence rejection.
+Consumer documentation points at these artifacts rather than copying contract
+fragments that can drift.
+
+### 2026-07-26 — Dogfood the actual process and private adapter boundaries
+
+Service-level fixtures prove deterministic contract states, but do not by
+themselves prove the stdio CLI, process restart journal, Torznab parser, or
+download-client handoff. The X6/X7 dogfood therefore starts loopback Jackett
+and download-client endpoints and invokes the real CLI in separate processes.
+It intentionally transports synthetic private credentials, URLs, and provider
+response data through the local adapter while asserting those values are absent
+from results, journal/state files, and retained evidence. The only
+side-effect-free retry attestation remains a service-harness scenario because
+the real Jackett adapter correctly cannot attest that an HTTP failure happened
+before every provider-side effect.
+
 ### 2026-07-26 — Preserve stale Git hooks and use scoped overrides
 
 Repository-local Git hooks are legacy `bd-shim` scripts that call the removed
@@ -218,15 +242,24 @@ history.
 
 ## Dependencies and unblock messages
 
-- ERR / E1-E2: publish the canonical authority-qualified subject and
-  `err.subject-map-batch/1` fixtures. Until then IWantIt can validate its
-  authority-qualified exact input envelope and preserve it verbatim, but it
-  cannot claim live cross-authority mapping or artifact identity verification.
-- MetaMusic / M6: consume the IWantIt canonical intent/result fixtures, invoke
-  preview then explicit choice/confirmation, and gate owned-state changes on
-  ERR verification. Until a consumer build is available, IWantIt uses an
-  offline consumer conformance harness and reports live integration as
-  externally blocked.
+- ERR / E1-E2: the canonical subject envelope and curated source-map fixtures
+  are now available at ERR commit
+  `4f957ffc0eef782a1fd2ffc3c14c2d02b0c1e80d`, with the ERR program gate closed
+  at `608f944`. IWantIt's checked-in owner schema is byte-identical to the
+  current ERR file (SHA-256
+  `5d53d20681fff3621705991657ce2deb278ecc4bbab7c3bad6ce590bdc5e20d3`).
+  Live cross-authority mapping and artifact verification still execute in ERR
+  and are never simulated by IWantIt.
+- MetaMusic / M6: consume
+  `schemas/curated-acquisition/v2/` and
+  `fixtures/curated-acquisition/v2/`, invoke preview then stable
+  choice/item-bound confirmation, and gate owned-state changes on ERR
+  verification. Read-only inspection at MetaMusic commit
+  `fa129ec766695e63462bd65dfaa14937f59938a6` shows its current acquisition
+  adapter still emits and validates v1 numeric-index contracts. Its worktree is
+  independently active, so IWantIt does not edit it or claim live v2
+  interoperability. The deterministic corpus and offline stdio consumer
+  fallback pass here.
 - Sensemaker: never call IWantIt from capture, ingestion, ranking, or automatic
   promotion. Only MetaMusic's separate explicit acquisition UI may form an
   acquisition intent.
@@ -316,6 +349,79 @@ contain only sanitized/offline data.
 - Dependency:
   - ERR subject envelopes are available at ERR commit `30698f8`; live
     `err.subject-map-batch/1.0` artifact verification remains external
-  - MetaMusic M6 must consume the forthcoming I2 fixtures and keep ownership
-    false until ERR verification
-- Remaining: I2 fixtures/dogfood/documentation and the I4 release/push gate
+  - MetaMusic M6 must consume the I2 fixtures and keep ownership false until
+    ERR verification
+- Remaining after this slice: I2 fixtures/dogfood/documentation and the I4
+  release/push gate; the I2 work is recorded in the next ledger entry
+
+### Canonical schemas, fixtures, and process dogfood / I2, X6, X7
+
+- Tasks: G0/G1 compatibility, I2, X6 offline execution, and the IWantIt-owned
+  X7 privacy evidence boundary
+- Decision: generate canonical consumer fixtures from runtime contracts; prove
+  the real stdio and loopback provider boundaries; retain only a deterministic
+  sanitized summary
+- Files changed:
+  `schemas/curated-acquisition/v2/`,
+  `fixtures/curated-acquisition/v2/`,
+  `scripts/_curated_acquisition_fixture_support.py`,
+  `scripts/generate_curated_acquisition_fixtures.py`,
+  `scripts/verify_curated_acquisition_fixtures.py`,
+  `scripts/dogfood_curated_acquisition.py`,
+  `tests/test_curated_acquisition_fixtures.py`
+- Commit: `7331764c2af1affa1d979f980f14067452201fba`
+- Consumer documentation commit:
+  `a1cf9180a6367c456c4a12a3cdbe9742f9bd32ac`
+- Scoped verification:
+  - `python3 scripts/verify_curated_acquisition_fixtures.py` -> 5 schemas,
+    41 fixtures, 18 scenarios, 4 replay pairs; passed
+  - `python3 -m unittest tests.test_curated_acquisition_fixtures` -> 1 passed
+  - `python3 -W error::ResourceWarning -m unittest
+    tests.test_curated_acquisition_fixtures tests.test_curated_acquisition
+    tests.test_acquisition tests.test_acquisition_journal
+    tests.test_private_adapters tests.test_comment_ranking_policy` -> 56 passed
+  - `python3 -m compileall -q
+    scripts/_curated_acquisition_fixture_support.py
+    scripts/generate_curated_acquisition_fixtures.py
+    scripts/verify_curated_acquisition_fixtures.py
+    scripts/dogfood_curated_acquisition.py
+    tests/test_curated_acquisition_fixtures.py` -> passed
+- Dogfood:
+  - `python3 scripts/dogfood_curated_acquisition.py --output-dir
+    docs/evidence/curated-acquisition` -> passed
+  - retained evidence:
+    `docs/evidence/curated-acquisition/curated-acquisition-dogfood.json`
+  - retained evidence SHA-256:
+    `b945ef839a23a83a939205639d0b4754c473606385d21cd7af4d03f2709aa9b0`
+  - actual separate CLI processes exercised capabilities, preview,
+    unconfirmed refusal, exact confirmed dispatch, completed replay,
+    cancellation/replay/refusal-after-cancel, partial batch, ingestion and
+    unpaired refusal, private evidence, unknown major, v1-only `--confirm`
+    refusal, and uncertain dispatch/replay
+  - exactly one successful provider handoff occurred; completed replay and
+    cancellation added zero; one deliberately uncertain provider attempt was
+    retained and did not retry
+  - safe side-effect-free failure, retry success, and completed replay were
+    exercised through the deterministic service boundary
+- Security evidence:
+  - synthetic provider credentials, private URLs, private handles, and provider
+    response bodies traversed only the loopback adapter/config boundary and
+    were absent from all CLI results, journal/state files, and retained
+    evidence
+  - all candidate source URLs are `null`; successful provider references are
+    opaque hashes; exact subjects are unchanged; ownership remains false
+    pending ERR verification
+- Lessons:
+  - byte-reproducible fixtures catch contract drift that schema-valid examples
+    alone do not;
+  - a real process boundary found and proves CLI exit semantics, durable replay,
+    adapter parsing, idempotency headers, and persistence redaction together;
+  - an HTTP adapter cannot honestly label an interrupted dispatch retry-safe
+    without an explicit provider attestation
+- Dependencies:
+  - ERR owner fixtures are available and the embedded subject schema matches
+    byte-for-byte
+  - MetaMusic still needs to consume v2; its currently committed acquisition
+    adapter remains v1 and is outside this repository
+- Remaining: final full I4 gates, release ledger update, Beads close,
+  pull/rebase, `bd sync`, push, prune, and upstream verification

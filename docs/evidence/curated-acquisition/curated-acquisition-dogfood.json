@@ -1,0 +1,61 @@
+{
+  "boundary": {
+    "contract": "local_stdio",
+    "provider": "loopback_jackett_and_download_client",
+    "separate_cli_processes": true
+  },
+  "effects": {
+    "cancel_provider_handoffs": 0,
+    "completed_replay_provider_handoffs": 0,
+    "opaque_unique_idempotency_keys": true,
+    "successful_provider_handoffs": 1,
+    "uncertain_provider_attempts": 1
+  },
+  "fixtures": {
+    "fixtures": 41,
+    "max_result_bytes": 2097152,
+    "replay_pairs": 4,
+    "scenarios": 18,
+    "schemas": 5,
+    "status": "ok"
+  },
+  "identity": {
+    "entity_kind": "music.recording",
+    "exactness": "exact",
+    "subject_preserved": true,
+    "subject_schema": "err.subject/1.0"
+  },
+  "ownership_handoff": {
+    "ownership_update_allowed": false,
+    "verification_status": "pending_err_verification"
+  },
+  "privacy": {
+    "private_values_absent_from_journal_and_state": true,
+    "private_values_absent_from_results": true,
+    "provider_response_body_not_exported": true,
+    "provider_urls_absent_from_results_and_persistence": true
+  },
+  "scenarios": {
+    "cancel_before_dispatch": "cancelled_and_replayed",
+    "capabilities": "ready",
+    "completed_replay": "identical_without_handoff",
+    "confirmed_dispatch": "dispatched",
+    "ingestion_origin": "refused",
+    "legacy_confirm_switch": "cannot_bypass_v2_confirmation",
+    "partial_batch": "invalid_item_refused_valid_item_preserved",
+    "preview": "choice_required",
+    "private_evidence": "refused_without_echo_or_persistence",
+    "safe_retry": {
+      "completed_replay_skipped_runner": true,
+      "failure": "DISPATCH_FAILED",
+      "retry_succeeded": true,
+      "retryable_only_with_no_side_effect_attestation": true
+    },
+    "uncertain_dispatch": "reconciliation_required_without_retry",
+    "unconfirmed_dispatch": "refused",
+    "unknown_major": "typed_refusal",
+    "unpaired_caller": "refused"
+  },
+  "schema": "iwantit.curated-acquisition-dogfood-evidence/1",
+  "status": "passed"
+}
