@@ -1,0 +1,65 @@
+{
+  "actions": [
+    "preview",
+    "dispatch",
+    "cancel"
+  ],
+  "cancellation": {
+    "after_dispatch": false,
+    "after_dispatch_state": "unsupported",
+    "before_dispatch": true
+  },
+  "contracts": {
+    "candidate": [
+      "iwantit.acquisition-candidate/2"
+    ],
+    "intent": [
+      "iwantit.acquisition-intent/2"
+    ],
+    "legacy_local_intent": [
+      "iwantit.acquisition-intent/1"
+    ],
+    "result": [
+      "iwantit.acquisition-result/2"
+    ],
+    "subject": [
+      "err.subject/1.0"
+    ]
+  },
+  "health": {
+    "configured_pairings": 1,
+    "journal_available": true,
+    "private_payloads_in_health": false,
+    "status": "ready"
+  },
+  "idempotency": {
+    "abandoned_dispatch": "reconciliation_required",
+    "completed_dispatch_replay": true,
+    "conflicting_reuse": "refused",
+    "durable_across_restart": true,
+    "required_for_v2": true
+  },
+  "limits": {
+    "max_batch_items": 25,
+    "max_candidates_per_item": 100,
+    "max_payload_bytes": 262144,
+    "max_result_bytes": 2097152
+  },
+  "pairing": {
+    "authentication": "host_process_plus_allowlist",
+    "credential_in_payload": false,
+    "required": true,
+    "transport": "local_stdio"
+  },
+  "providers": {
+    "configured_active": [
+      "jackett"
+    ],
+    "supported": [
+      "jackett",
+      "prowlarr",
+      "soulseek"
+    ]
+  },
+  "schema": "iwantit.acquisition-capabilities/1"
+}

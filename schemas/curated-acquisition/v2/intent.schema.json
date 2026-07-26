@@ -1,0 +1,419 @@
+{
+  "$id": "iwantit.acquisition-intent/2",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "enum": [
+        "preview",
+        "dispatch",
+        "cancel"
+      ]
+    },
+    "caller": {
+      "additionalProperties": false,
+      "properties": {
+        "actor_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "application": {
+          "const": "metamusic"
+        },
+        "instance_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "origin": {
+          "additionalProperties": false,
+          "properties": {
+            "interaction_id": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+              "type": "string"
+            },
+            "kind": {
+              "const": "explicit_user_acquisition"
+            }
+          },
+          "required": [
+            "kind",
+            "interaction_id"
+          ],
+          "type": "object"
+        },
+        "pairing_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "pairing_revision": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "workspace_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "application",
+        "instance_id",
+        "pairing_id",
+        "pairing_revision",
+        "workspace_id",
+        "actor_id",
+        "origin"
+      ],
+      "type": "object"
+    },
+    "idempotency_key": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "intent_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation": {
+            "additionalProperties": false,
+            "properties": {
+              "approved": {
+                "const": true
+              },
+              "candidate_ref": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "confirmation_id": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "type": "string"
+              },
+              "confirmed_at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "preview_result_id": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "approved",
+              "confirmation_id",
+              "confirmed_at",
+              "preview_result_id",
+              "candidate_ref"
+            ],
+            "type": "object"
+          },
+          "constraints": {
+            "additionalProperties": false,
+            "properties": {
+              "allow_substitution": {
+                "const": false
+              },
+              "destination": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "metamusic_staging",
+                      "library_import"
+                    ]
+                  },
+                  "ref": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "ref"
+                ],
+                "type": "object"
+              },
+              "exact_version": {
+                "const": true
+              },
+              "formats": {
+                "items": {
+                  "maxLength": 40,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "media": {
+                "items": {
+                  "maxLength": 40,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 16,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "policy": {
+                "additionalProperties": false,
+                "properties": {
+                  "authorized_sources_only": {
+                    "const": true
+                  },
+                  "policy_version": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                    "type": "string"
+                  },
+                  "private": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "authorized_sources_only",
+                  "private",
+                  "policy_version"
+                ],
+                "type": "object"
+              },
+              "rights": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "enum": [
+                      "user_authorized",
+                      "licensed_download",
+                      "personal_archive"
+                    ]
+                  },
+                  "policy_ref": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "basis",
+                  "policy_ref"
+                ],
+                "type": "object"
+              },
+              "sources": {
+                "additionalProperties": false,
+                "properties": {
+                  "allowed_providers": {
+                    "items": {
+                      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+                      "type": "string"
+                    },
+                    "maxItems": 16,
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "excluded_providers": {
+                    "items": {
+                      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+                      "type": "string"
+                    },
+                    "maxItems": 16,
+                    "type": "array",
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "allowed_providers"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "sources",
+              "formats",
+              "exact_version",
+              "allow_substitution",
+              "rights",
+              "policy",
+              "destination"
+            ],
+            "type": "object"
+          },
+          "item_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "search_hints": {
+            "additionalProperties": false,
+            "properties": {
+              "artist": {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              "release": {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              "version": {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              "year": {
+                "maximum": 3000,
+                "minimum": 1800,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "artist",
+              "title"
+            ],
+            "type": "object"
+          },
+          "selection": {
+            "additionalProperties": false,
+            "properties": {
+              "candidate_ref": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "preview_result_id": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "preview_result_id",
+              "candidate_ref"
+            ],
+            "type": "object"
+          },
+          "subject": {
+            "$defs": {
+              "AuthorityRevision": {
+                "additionalProperties": false,
+                "properties": {
+                  "event_hash": {
+                    "pattern": "^sha256:[0-9a-f]{64}$",
+                    "title": "Event Hash",
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "minimum": 0,
+                    "title": "Sequence",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "sequence",
+                  "event_hash"
+                ],
+                "title": "AuthorityRevision",
+                "type": "object"
+              },
+              "SubjectExactness": {
+                "enum": [
+                  "exact",
+                  "version_family",
+                  "related",
+                  "unknown"
+                ],
+                "title": "SubjectExactness",
+                "type": "string"
+              }
+            },
+            "$id": "https://xref.local/schemas/subject-envelope/1.0",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": false,
+            "properties": {
+              "authority_id": {
+                "pattern": "^xref:authority:[0-9A-HJKMNP-TV-Z]{26}$",
+                "title": "Authority Id",
+                "type": "string"
+              },
+              "authority_revision": {
+                "$ref": "#/$defs/AuthorityRevision"
+              },
+              "entity_kind": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Entity Kind",
+                "type": "string"
+              },
+              "exactness": {
+                "$ref": "#/$defs/SubjectExactness"
+              },
+              "identity_explanation_hash": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "title": "Identity Explanation Hash",
+                "type": "string"
+              },
+              "local_id": {
+                "pattern": "^xref:entity:[0-9A-HJKMNP-TV-Z]{26}$",
+                "title": "Local Id",
+                "type": "string"
+              },
+              "portable_refs": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 64,
+                "title": "Portable Refs",
+                "type": "array"
+              },
+              "schema_version": {
+                "const": "err.subject/1.0",
+                "default": "err.subject/1.0",
+                "title": "Schema Version",
+                "type": "string"
+              }
+            },
+            "required": [
+              "authority_id",
+              "authority_revision",
+              "entity_kind",
+              "exactness",
+              "local_id",
+              "identity_explanation_hash"
+            ],
+            "title": "SubjectEnvelope",
+            "type": "object"
+          }
+        },
+        "required": [
+          "item_id",
+          "subject",
+          "search_hints",
+          "constraints"
+        ],
+        "type": "object"
+      },
+      "maxItems": 25,
+      "minItems": 1,
+      "type": "array"
+    },
+    "schema": {
+      "const": "iwantit.acquisition-intent/2"
+    }
+  },
+  "required": [
+    "schema",
+    "intent_id",
+    "idempotency_key",
+    "action",
+    "caller",
+    "items"
+  ],
+  "type": "object"
+}

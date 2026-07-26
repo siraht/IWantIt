@@ -1,0 +1,92 @@
+{
+  "$defs": {
+    "AuthorityRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "event_hash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Event Hash",
+          "type": "string"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sequence",
+        "event_hash"
+      ],
+      "title": "AuthorityRevision",
+      "type": "object"
+    },
+    "SubjectExactness": {
+      "enum": [
+        "exact",
+        "version_family",
+        "related",
+        "unknown"
+      ],
+      "title": "SubjectExactness",
+      "type": "string"
+    }
+  },
+  "$id": "https://xref.local/schemas/subject-envelope/1.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authority_id": {
+      "pattern": "^xref:authority:[0-9A-HJKMNP-TV-Z]{26}$",
+      "title": "Authority Id",
+      "type": "string"
+    },
+    "authority_revision": {
+      "$ref": "#/$defs/AuthorityRevision"
+    },
+    "entity_kind": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Entity Kind",
+      "type": "string"
+    },
+    "exactness": {
+      "$ref": "#/$defs/SubjectExactness"
+    },
+    "identity_explanation_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Identity Explanation Hash",
+      "type": "string"
+    },
+    "local_id": {
+      "pattern": "^xref:entity:[0-9A-HJKMNP-TV-Z]{26}$",
+      "title": "Local Id",
+      "type": "string"
+    },
+    "portable_refs": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "title": "Portable Refs",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "err.subject/1.0",
+      "default": "err.subject/1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "authority_id",
+    "authority_revision",
+    "entity_kind",
+    "exactness",
+    "local_id",
+    "identity_explanation_hash"
+  ],
+  "title": "SubjectEnvelope",
+  "type": "object"
+}

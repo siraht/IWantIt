@@ -1,0 +1,235 @@
+{
+  "$id": "iwantit.acquisition-capabilities/1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actions": {
+      "items": {
+        "enum": [
+          "preview",
+          "dispatch",
+          "cancel"
+        ]
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "cancellation": {
+      "additionalProperties": false,
+      "properties": {
+        "after_dispatch": {
+          "const": false
+        },
+        "after_dispatch_state": {
+          "const": "unsupported"
+        },
+        "before_dispatch": {
+          "const": true
+        }
+      },
+      "required": [
+        "before_dispatch",
+        "after_dispatch",
+        "after_dispatch_state"
+      ],
+      "type": "object"
+    },
+    "contracts": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "intent": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "legacy_local_intent": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "result": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "subject": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "intent",
+        "result",
+        "candidate",
+        "subject",
+        "legacy_local_intent"
+      ],
+      "type": "object"
+    },
+    "health": {
+      "additionalProperties": false,
+      "properties": {
+        "configured_pairings": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "journal_available": {
+          "type": "boolean"
+        },
+        "private_payloads_in_health": {
+          "const": false
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "idempotency_required",
+            "pairing_required"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "configured_pairings",
+        "journal_available",
+        "private_payloads_in_health"
+      ],
+      "type": "object"
+    },
+    "idempotency": {
+      "additionalProperties": false,
+      "properties": {
+        "abandoned_dispatch": {
+          "const": "reconciliation_required"
+        },
+        "completed_dispatch_replay": {
+          "const": true
+        },
+        "conflicting_reuse": {
+          "const": "refused"
+        },
+        "durable_across_restart": {
+          "const": true
+        },
+        "required_for_v2": {
+          "const": true
+        }
+      },
+      "required": [
+        "required_for_v2",
+        "durable_across_restart",
+        "completed_dispatch_replay",
+        "conflicting_reuse",
+        "abandoned_dispatch"
+      ],
+      "type": "object"
+    },
+    "limits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_batch_items": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_candidates_per_item": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_payload_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_result_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_batch_items",
+        "max_payload_bytes",
+        "max_result_bytes",
+        "max_candidates_per_item"
+      ],
+      "type": "object"
+    },
+    "pairing": {
+      "additionalProperties": false,
+      "properties": {
+        "authentication": {
+          "const": "host_process_plus_allowlist"
+        },
+        "credential_in_payload": {
+          "const": false
+        },
+        "required": {
+          "const": true
+        },
+        "transport": {
+          "const": "local_stdio"
+        }
+      },
+      "required": [
+        "required",
+        "transport",
+        "authentication",
+        "credential_in_payload"
+      ],
+      "type": "object"
+    },
+    "providers": {
+      "additionalProperties": false,
+      "properties": {
+        "configured_active": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "supported": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "supported",
+        "configured_active"
+      ],
+      "type": "object"
+    },
+    "schema": {
+      "const": "iwantit.acquisition-capabilities/1"
+    }
+  },
+  "required": [
+    "schema",
+    "contracts",
+    "limits",
+    "actions",
+    "providers",
+    "pairing",
+    "idempotency",
+    "cancellation",
+    "health"
+  ],
+  "type": "object"
+}

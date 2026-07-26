@@ -1,0 +1,180 @@
+{
+  "compatibility": {
+    "additive_minor_fields": "optional_only",
+    "private_evidence": "not_accepted",
+    "unknown_major": "fail_closed"
+  },
+  "contracts": {
+    "candidate": "iwantit.acquisition-candidate/2",
+    "capabilities": "iwantit.acquisition-capabilities/1",
+    "intent": "iwantit.acquisition-intent/2",
+    "result": "iwantit.acquisition-result/2",
+    "subject_owner": "err.subject/1.0"
+  },
+  "owner": "IWantIt",
+  "scenarios": [
+    {
+      "expected_error": null,
+      "expected_item_status": null,
+      "expected_status": "ready",
+      "intent_schema_valid": true,
+      "name": "capabilities",
+      "request": null,
+      "result": "capabilities.result.json"
+    },
+    {
+      "expected_error": null,
+      "expected_item_status": "choice_required",
+      "expected_status": "previewed",
+      "intent_schema_valid": true,
+      "name": "explicit-preview",
+      "request": "explicit-preview.intent.json",
+      "result": "explicit-preview.result.json"
+    },
+    {
+      "expected_error": null,
+      "expected_item_status": "dispatched",
+      "expected_status": "dispatched",
+      "intent_schema_valid": true,
+      "name": "explicit-dispatch",
+      "request": "explicit-dispatch.intent.json",
+      "result": "explicit-dispatch.result.json"
+    },
+    {
+      "expected_error": null,
+      "expected_item_status": "dispatched",
+      "expected_status": "dispatched",
+      "intent_schema_valid": true,
+      "name": "explicit-replay",
+      "request": "explicit-replay.intent.json",
+      "result": "explicit-replay.result.json"
+    },
+    {
+      "expected_error": "CONFIRMATION_REQUIRED",
+      "expected_item_status": "refused",
+      "expected_status": "refused",
+      "intent_schema_valid": true,
+      "name": "refusal-unconfirmed",
+      "request": "refusal-unconfirmed.intent.json",
+      "result": "refusal-unconfirmed.result.json"
+    },
+    {
+      "expected_error": null,
+      "expected_item_status": "cancelled",
+      "expected_status": "cancelled",
+      "intent_schema_valid": true,
+      "name": "cancel-before-dispatch",
+      "request": "cancel-before-dispatch.intent.json",
+      "result": "cancel-before-dispatch.result.json"
+    },
+    {
+      "expected_error": null,
+      "expected_item_status": "cancelled",
+      "expected_status": "cancelled",
+      "intent_schema_valid": true,
+      "name": "cancel-replay",
+      "request": "cancel-replay.intent.json",
+      "result": "cancel-replay.result.json"
+    },
+    {
+      "expected_error": "EXACT_RECORDING_REQUIRED",
+      "expected_item_status": "refused",
+      "expected_status": "partial",
+      "intent_schema_valid": true,
+      "name": "partial-item-error",
+      "request": "partial-item-error.intent.json",
+      "result": "partial-item-error.result.json"
+    },
+    {
+      "expected_error": "PRIVATE_SOURCE_EVIDENCE_FORBIDDEN",
+      "expected_item_status": "refused",
+      "expected_status": "refused",
+      "intent_schema_valid": false,
+      "name": "refusal-private-evidence",
+      "request": "refusal-private-evidence.intent.json",
+      "result": "refusal-private-evidence.result.json"
+    },
+    {
+      "expected_error": "INVALID_INTENT",
+      "expected_item_status": null,
+      "expected_status": "refused",
+      "intent_schema_valid": false,
+      "name": "refusal-ingestion-origin",
+      "request": "refusal-ingestion-origin.intent.json",
+      "result": "refusal-ingestion-origin.result.json"
+    },
+    {
+      "expected_error": "UNPAIRED_CALLER",
+      "expected_item_status": null,
+      "expected_status": "refused",
+      "intent_schema_valid": true,
+      "name": "refusal-unpaired",
+      "request": "refusal-unpaired.intent.json",
+      "result": "refusal-unpaired.result.json"
+    },
+    {
+      "expected_error": "UNSUPPORTED_CONTRACT_VERSION",
+      "expected_item_status": null,
+      "expected_status": "refused",
+      "intent_schema_valid": false,
+      "name": "refusal-unknown-major",
+      "request": "refusal-unknown-major.intent.json",
+      "result": "refusal-unknown-major.result.json"
+    },
+    {
+      "expected_error": "UNSUPPORTED_PROVIDER",
+      "expected_item_status": "refused",
+      "expected_status": "refused",
+      "intent_schema_valid": true,
+      "name": "refusal-unsupported-provider",
+      "request": "refusal-unsupported-provider.intent.json",
+      "result": "refusal-unsupported-provider.result.json"
+    },
+    {
+      "expected_error": "DISPATCH_FAILED",
+      "expected_item_status": "error",
+      "expected_status": "refused",
+      "intent_schema_valid": true,
+      "name": "retry-safe-failure",
+      "request": "retry-safe-failure.intent.json",
+      "result": "retry-safe-failure.result.json"
+    },
+    {
+      "expected_error": null,
+      "expected_item_status": "dispatched",
+      "expected_status": "dispatched",
+      "intent_schema_valid": true,
+      "name": "retry-success",
+      "request": "retry-success.intent.json",
+      "result": "retry-success.result.json"
+    },
+    {
+      "expected_error": null,
+      "expected_item_status": "dispatched",
+      "expected_status": "dispatched",
+      "intent_schema_valid": true,
+      "name": "retry-replay",
+      "request": "retry-replay.intent.json",
+      "result": "retry-replay.result.json"
+    },
+    {
+      "expected_error": "DISPATCH_OUTCOME_UNCERTAIN",
+      "expected_item_status": "error",
+      "expected_status": "refused",
+      "intent_schema_valid": true,
+      "name": "uncertain-dispatch",
+      "request": "uncertain-dispatch.intent.json",
+      "result": "uncertain-dispatch.result.json"
+    },
+    {
+      "expected_error": "DISPATCH_OUTCOME_UNCERTAIN",
+      "expected_item_status": "error",
+      "expected_status": "refused",
+      "intent_schema_valid": true,
+      "name": "uncertain-replay",
+      "request": "uncertain-replay.intent.json",
+      "result": "uncertain-replay.result.json"
+    }
+  ],
+  "schema": "iwantit.acquisition-fixture-manifest/1"
+}

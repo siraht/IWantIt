@@ -1,0 +1,54 @@
+{
+  "action": "dispatch",
+  "error": null,
+  "intent_id": "fixture-uncertain",
+  "items": [
+    {
+      "candidates": [],
+      "dispatch": {},
+      "error": {
+        "category": "provider",
+        "code": "DISPATCH_OUTCOME_UNCERTAIN",
+        "item_id": "item-1",
+        "message": "The dispatch workflow ended without a durable provider outcome; reconcile the provider before any retry.",
+        "retryable": false
+      },
+      "item_id": "item-1",
+      "preview_result_id": "sha256:d93aa1acf210a24bb2b4788d992c3a9b6c41e257b8fa7873ffa6b17e5c10cdc1",
+      "selected": null,
+      "status": "error",
+      "subject": {
+        "authority_id": "xref:authority:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "authority_revision": {
+          "event_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "sequence": 42
+        },
+        "entity_kind": "music.recording",
+        "exactness": "exact",
+        "identity_explanation_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "local_id": "xref:entity:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "portable_refs": [
+          "musicbrainz:recording:81c386f6-ecde-480e-8f8d-7af94af61f13"
+        ],
+        "schema_version": "err.subject/1.0"
+      },
+      "verification": {
+        "ownership_update_allowed": false,
+        "required": false,
+        "status": "not_applicable"
+      }
+    }
+  ],
+  "privacy": {
+    "classification": "local_private",
+    "community_publish_allowed": false,
+    "persistence": "sanitized_local",
+    "private_source_evidence_accepted": false,
+    "provider_payloads_exportable": false,
+    "remote_inference_allowed": false
+  },
+  "result_id": "sha256:a67c8705d61350c141aff39e761470b76298a084cdf2d586565a8316dfc6f48d",
+  "schema": "iwantit.acquisition-result/2",
+  "side_effects_allowed": false,
+  "status": "refused"
+}

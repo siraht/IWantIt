@@ -1,0 +1,230 @@
+{
+  "$id": "iwantit.acquisition-candidate/2",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "availability": {
+      "additionalProperties": false,
+      "properties": {
+        "leechers": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "seeders": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "snatches": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "state": {
+          "const": "observed"
+        }
+      },
+      "required": [
+        "state",
+        "seeders",
+        "leechers",
+        "snatches"
+      ],
+      "type": "object"
+    },
+    "candidate_ref": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "edition": {
+      "additionalProperties": false,
+      "properties": {
+        "encoding": {
+          "maxLength": 120,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file_count": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "format": {
+          "maxLength": 120,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "media": {
+          "maxLength": 120,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remaster_title": {
+          "maxLength": 300,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remaster_year": {
+          "maximum": 3000,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "format",
+        "encoding",
+        "media",
+        "remaster_year",
+        "remaster_title",
+        "file_count",
+        "size_bytes"
+      ],
+      "type": "object"
+    },
+    "position": {
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "ranking": {
+      "additionalProperties": false,
+      "properties": {
+        "reasons": {
+          "items": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "rejected": {
+          "type": "boolean"
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "score",
+        "rejected",
+        "reasons"
+      ],
+      "type": "object"
+    },
+    "release": {
+      "additionalProperties": false,
+      "properties": {
+        "artists": {
+          "items": {
+            "maxLength": 300,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "catalog_number": {
+          "maxLength": 300,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "maxLength": 300,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tags": {
+          "items": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "title": {
+          "maxLength": 500,
+          "type": "string"
+        },
+        "year": {
+          "maximum": 3000,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "title",
+        "artists",
+        "year",
+        "label",
+        "catalog_number",
+        "tags"
+      ],
+      "type": "object"
+    },
+    "schema": {
+      "const": "iwantit.acquisition-candidate/2"
+    },
+    "source": {
+      "maxLength": 120,
+      "type": "string"
+    },
+    "source_url": {
+      "type": "null"
+    },
+    "title": {
+      "maxLength": 500,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "candidate_ref",
+    "position",
+    "title",
+    "source",
+    "source_url",
+    "release",
+    "edition",
+    "availability",
+    "ranking"
+  ],
+  "type": "object"
+}

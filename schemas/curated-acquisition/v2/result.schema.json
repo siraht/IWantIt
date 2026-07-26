@@ -1,0 +1,844 @@
+{
+  "$id": "iwantit.acquisition-result/2",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "enum": [
+        "preview",
+        "dispatch",
+        "cancel",
+        "unknown"
+      ]
+    },
+    "error": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "enum": [
+            "contract",
+            "identity",
+            "pairing",
+            "confirmation",
+            "conflict",
+            "provider",
+            "cancellation"
+          ]
+        },
+        "code": {
+          "pattern": "^[A-Z][A-Z0-9_]{1,79}$",
+          "type": "string"
+        },
+        "item_id": {
+          "maxLength": 128,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "maxLength": 500,
+          "minLength": 1,
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable",
+        "category",
+        "item_id"
+      ],
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "intent_id": {
+      "maxLength": 128,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "items": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "availability": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "leechers": {
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "seeders": {
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "snatches": {
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "state": {
+                      "const": "observed"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "seeders",
+                    "leechers",
+                    "snatches"
+                  ],
+                  "type": "object"
+                },
+                "candidate_ref": {
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "edition": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "encoding": {
+                      "maxLength": 120,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "file_count": {
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "format": {
+                      "maxLength": 120,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "media": {
+                      "maxLength": 120,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "remaster_title": {
+                      "maxLength": 300,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "remaster_year": {
+                      "maximum": 3000,
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "size_bytes": {
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "format",
+                    "encoding",
+                    "media",
+                    "remaster_year",
+                    "remaster_title",
+                    "file_count",
+                    "size_bytes"
+                  ],
+                  "type": "object"
+                },
+                "position": {
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "ranking": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "reasons": {
+                      "items": {
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      "maxItems": 32,
+                      "type": "array"
+                    },
+                    "rejected": {
+                      "type": "boolean"
+                    },
+                    "score": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "score",
+                    "rejected",
+                    "reasons"
+                  ],
+                  "type": "object"
+                },
+                "release": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "artists": {
+                      "items": {
+                        "maxLength": 300,
+                        "type": "string"
+                      },
+                      "maxItems": 32,
+                      "type": "array"
+                    },
+                    "catalog_number": {
+                      "maxLength": 300,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "label": {
+                      "maxLength": 300,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "tags": {
+                      "items": {
+                        "maxLength": 120,
+                        "type": "string"
+                      },
+                      "maxItems": 64,
+                      "type": "array"
+                    },
+                    "title": {
+                      "maxLength": 500,
+                      "type": "string"
+                    },
+                    "year": {
+                      "maximum": 3000,
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "artists",
+                    "year",
+                    "label",
+                    "catalog_number",
+                    "tags"
+                  ],
+                  "type": "object"
+                },
+                "schema": {
+                  "const": "iwantit.acquisition-candidate/2"
+                },
+                "source": {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "source_url": {
+                  "type": "null"
+                },
+                "title": {
+                  "maxLength": 500,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "schema",
+                "candidate_ref",
+                "position",
+                "title",
+                "source",
+                "source_url",
+                "release",
+                "edition",
+                "availability",
+                "ranking"
+              ],
+              "type": "object"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "dispatch": {
+            "additionalProperties": false,
+            "maxProperties": 16,
+            "patternProperties": {
+              "^[a-z][a-z0-9_-]{0,63}$": {
+                "additionalProperties": false,
+                "properties": {
+                  "count": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "reference": {
+                    "pattern": "^sha256:[0-9a-f]{64}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "status": {
+                    "const": "ok"
+                  }
+                },
+                "required": [
+                  "status",
+                  "count",
+                  "reference"
+                ],
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "category": {
+                "enum": [
+                  "contract",
+                  "identity",
+                  "pairing",
+                  "confirmation",
+                  "conflict",
+                  "provider",
+                  "cancellation"
+                ]
+              },
+              "code": {
+                "pattern": "^[A-Z][A-Z0-9_]{1,79}$",
+                "type": "string"
+              },
+              "item_id": {
+                "maxLength": 128,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "retryable",
+              "category",
+              "item_id"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "item_id": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "preview_result_id": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "availability": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "leechers": {
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "seeders": {
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "snatches": {
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "state": {
+                        "const": "observed"
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "seeders",
+                      "leechers",
+                      "snatches"
+                    ],
+                    "type": "object"
+                  },
+                  "candidate_ref": {
+                    "pattern": "^sha256:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "edition": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "encoding": {
+                        "maxLength": 120,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "file_count": {
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "format": {
+                        "maxLength": 120,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "media": {
+                        "maxLength": 120,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "remaster_title": {
+                        "maxLength": 300,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "remaster_year": {
+                        "maximum": 3000,
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "size_bytes": {
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "format",
+                      "encoding",
+                      "media",
+                      "remaster_year",
+                      "remaster_title",
+                      "file_count",
+                      "size_bytes"
+                    ],
+                    "type": "object"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "ranking": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "reasons": {
+                        "items": {
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      "rejected": {
+                        "type": "boolean"
+                      },
+                      "score": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "score",
+                      "rejected",
+                      "reasons"
+                    ],
+                    "type": "object"
+                  },
+                  "release": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "artists": {
+                        "items": {
+                          "maxLength": 300,
+                          "type": "string"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      "catalog_number": {
+                        "maxLength": 300,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "label": {
+                        "maxLength": 300,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "tags": {
+                        "items": {
+                          "maxLength": 120,
+                          "type": "string"
+                        },
+                        "maxItems": 64,
+                        "type": "array"
+                      },
+                      "title": {
+                        "maxLength": 500,
+                        "type": "string"
+                      },
+                      "year": {
+                        "maximum": 3000,
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "title",
+                      "artists",
+                      "year",
+                      "label",
+                      "catalog_number",
+                      "tags"
+                    ],
+                    "type": "object"
+                  },
+                  "schema": {
+                    "const": "iwantit.acquisition-candidate/2"
+                  },
+                  "source": {
+                    "maxLength": 120,
+                    "type": "string"
+                  },
+                  "source_url": {
+                    "type": "null"
+                  },
+                  "title": {
+                    "maxLength": 500,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "schema",
+                  "candidate_ref",
+                  "position",
+                  "title",
+                  "source",
+                  "source_url",
+                  "release",
+                  "edition",
+                  "availability",
+                  "ranking"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "choice_required",
+              "no_candidates",
+              "dispatched",
+              "cancelled",
+              "refused",
+              "error",
+              "already_in_progress"
+            ]
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$defs": {
+                  "AuthorityRevision": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "event_hash": {
+                        "pattern": "^sha256:[0-9a-f]{64}$",
+                        "title": "Event Hash",
+                        "type": "string"
+                      },
+                      "sequence": {
+                        "minimum": 0,
+                        "title": "Sequence",
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "sequence",
+                      "event_hash"
+                    ],
+                    "title": "AuthorityRevision",
+                    "type": "object"
+                  },
+                  "SubjectExactness": {
+                    "enum": [
+                      "exact",
+                      "version_family",
+                      "related",
+                      "unknown"
+                    ],
+                    "title": "SubjectExactness",
+                    "type": "string"
+                  }
+                },
+                "$id": "https://xref.local/schemas/subject-envelope/1.0",
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "additionalProperties": false,
+                "properties": {
+                  "authority_id": {
+                    "pattern": "^xref:authority:[0-9A-HJKMNP-TV-Z]{26}$",
+                    "title": "Authority Id",
+                    "type": "string"
+                  },
+                  "authority_revision": {
+                    "$ref": "#/$defs/AuthorityRevision"
+                  },
+                  "entity_kind": {
+                    "maxLength": 120,
+                    "minLength": 1,
+                    "title": "Entity Kind",
+                    "type": "string"
+                  },
+                  "exactness": {
+                    "$ref": "#/$defs/SubjectExactness"
+                  },
+                  "identity_explanation_hash": {
+                    "pattern": "^sha256:[0-9a-f]{64}$",
+                    "title": "Identity Explanation Hash",
+                    "type": "string"
+                  },
+                  "local_id": {
+                    "pattern": "^xref:entity:[0-9A-HJKMNP-TV-Z]{26}$",
+                    "title": "Local Id",
+                    "type": "string"
+                  },
+                  "portable_refs": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 64,
+                    "title": "Portable Refs",
+                    "type": "array"
+                  },
+                  "schema_version": {
+                    "const": "err.subject/1.0",
+                    "default": "err.subject/1.0",
+                    "title": "Schema Version",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "authority_id",
+                  "authority_revision",
+                  "entity_kind",
+                  "exactness",
+                  "local_id",
+                  "identity_explanation_hash"
+                ],
+                "title": "SubjectEnvelope",
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "verification": {
+            "additionalProperties": false,
+            "properties": {
+              "ownership_update_allowed": {
+                "const": false
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "status": {
+                "enum": [
+                  "not_applicable",
+                  "pending_err_verification"
+                ]
+              }
+            },
+            "required": [
+              "required",
+              "status",
+              "ownership_update_allowed"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "item_id",
+          "subject",
+          "status",
+          "preview_result_id",
+          "candidates",
+          "selected",
+          "dispatch",
+          "verification",
+          "error"
+        ],
+        "type": "object"
+      },
+      "maxItems": 25,
+      "type": "array"
+    },
+    "privacy": {
+      "additionalProperties": false,
+      "properties": {
+        "classification": {
+          "enum": [
+            "restricted",
+            "local_private"
+          ]
+        },
+        "community_publish_allowed": {
+          "const": false
+        },
+        "persistence": {
+          "const": "sanitized_local"
+        },
+        "private_source_evidence_accepted": {
+          "const": false
+        },
+        "provider_payloads_exportable": {
+          "const": false
+        },
+        "remote_inference_allowed": {
+          "const": false
+        }
+      },
+      "required": [
+        "classification",
+        "persistence",
+        "community_publish_allowed",
+        "remote_inference_allowed",
+        "provider_payloads_exportable",
+        "private_source_evidence_accepted"
+      ],
+      "type": "object"
+    },
+    "result_id": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "schema": {
+      "const": "iwantit.acquisition-result/2"
+    },
+    "side_effects_allowed": {
+      "type": "boolean"
+    },
+    "status": {
+      "enum": [
+        "previewed",
+        "dispatched",
+        "cancelled",
+        "partial",
+        "refused"
+      ]
+    }
+  },
+  "required": [
+    "schema",
+    "result_id",
+    "intent_id",
+    "action",
+    "status",
+    "side_effects_allowed",
+    "items",
+    "privacy",
+    "error"
+  ],
+  "type": "object"
+}

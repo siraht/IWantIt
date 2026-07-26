@@ -1,0 +1,24 @@
+{
+  "action": "preview",
+  "error": {
+    "category": "pairing",
+    "code": "UNPAIRED_CALLER",
+    "item_id": null,
+    "message": "The caller does not match an active local pairing.",
+    "retryable": false
+  },
+  "intent_id": "fixture-unpaired",
+  "items": [],
+  "privacy": {
+    "classification": "local_private",
+    "community_publish_allowed": false,
+    "persistence": "sanitized_local",
+    "private_source_evidence_accepted": false,
+    "provider_payloads_exportable": false,
+    "remote_inference_allowed": false
+  },
+  "result_id": "sha256:334be3539aa302df5a48a9de96075b69ef667703dad654d5573ac0cb686e34db",
+  "schema": "iwantit.acquisition-result/2",
+  "side_effects_allowed": false,
+  "status": "refused"
+}

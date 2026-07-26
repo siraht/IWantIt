@@ -1,0 +1,24 @@
+{
+  "action": "preview",
+  "error": {
+    "category": "contract",
+    "code": "UNSUPPORTED_CONTRACT_VERSION",
+    "item_id": null,
+    "message": "The acquisition intent contract version is not supported.",
+    "retryable": false
+  },
+  "intent_id": "fixture-unknown-major",
+  "items": [],
+  "privacy": {
+    "classification": "local_private",
+    "community_publish_allowed": false,
+    "persistence": "sanitized_local",
+    "private_source_evidence_accepted": false,
+    "provider_payloads_exportable": false,
+    "remote_inference_allowed": false
+  },
+  "result_id": "sha256:947bbc380381ea11bc677beeb6586919beee0d06caabe5b071abac6b61473963",
+  "schema": "iwantit.acquisition-result/2",
+  "side_effects_allowed": false,
+  "status": "refused"
+}

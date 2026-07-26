@@ -1,0 +1,89 @@
+{
+  "action": "dispatch",
+  "error": null,
+  "intent_id": "fixture-explicit",
+  "items": [
+    {
+      "candidates": [],
+      "dispatch": {
+        "jackett": {
+          "count": 1,
+          "reference": "sha256:5c87a9bf732b0fc0c6a36c4c06852f06001654b2491b54059c0cc11889ff6696",
+          "status": "ok"
+        }
+      },
+      "error": null,
+      "item_id": "item-1",
+      "preview_result_id": "sha256:a753ba63f4239daec189219ae3abdfb946d5bc3723dab99d96b6a1e860028dfe",
+      "selected": {
+        "availability": {
+          "leechers": 2,
+          "seeders": 9,
+          "snatches": null,
+          "state": "observed"
+        },
+        "candidate_ref": "sha256:59e482388e8286e7e36bad786de28bfeca282caba86648e154c637268d164027",
+        "edition": {
+          "encoding": null,
+          "file_count": null,
+          "format": null,
+          "media": null,
+          "remaster_title": null,
+          "remaster_year": null,
+          "size_bytes": 12345678
+        },
+        "position": 0,
+        "ranking": {
+          "reasons": [],
+          "rejected": false,
+          "score": null
+        },
+        "release": {
+          "artists": [],
+          "catalog_number": null,
+          "label": null,
+          "tags": [],
+          "title": "Artist - Track (Extended Mix) FLAC WEB",
+          "year": null
+        },
+        "schema": "iwantit.acquisition-candidate/2",
+        "source": "Jackett",
+        "source_url": null,
+        "title": "Artist - Track (Extended Mix) FLAC WEB"
+      },
+      "status": "dispatched",
+      "subject": {
+        "authority_id": "xref:authority:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "authority_revision": {
+          "event_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "sequence": 42
+        },
+        "entity_kind": "music.recording",
+        "exactness": "exact",
+        "identity_explanation_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "local_id": "xref:entity:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "portable_refs": [
+          "musicbrainz:recording:81c386f6-ecde-480e-8f8d-7af94af61f13"
+        ],
+        "schema_version": "err.subject/1.0"
+      },
+      "verification": {
+        "ownership_update_allowed": false,
+        "required": true,
+        "status": "pending_err_verification"
+      }
+    }
+  ],
+  "privacy": {
+    "classification": "local_private",
+    "community_publish_allowed": false,
+    "persistence": "sanitized_local",
+    "private_source_evidence_accepted": false,
+    "provider_payloads_exportable": false,
+    "remote_inference_allowed": false
+  },
+  "result_id": "sha256:c08dae7936afaf864d971a2061d091fe819ab9318c7d0ad3ea2a5be6cd5bc4d8",
+  "schema": "iwantit.acquisition-result/2",
+  "side_effects_allowed": true,
+  "status": "dispatched"
+}

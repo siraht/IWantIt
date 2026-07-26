@@ -1,0 +1,85 @@
+{
+  "action": "preview",
+  "error": null,
+  "intent_id": "fixture-cancel",
+  "items": [
+    {
+      "candidates": [
+        {
+          "availability": {
+            "leechers": 2,
+            "seeders": 9,
+            "snatches": null,
+            "state": "observed"
+          },
+          "candidate_ref": "sha256:59e482388e8286e7e36bad786de28bfeca282caba86648e154c637268d164027",
+          "edition": {
+            "encoding": null,
+            "file_count": null,
+            "format": null,
+            "media": null,
+            "remaster_title": null,
+            "remaster_year": null,
+            "size_bytes": 12345678
+          },
+          "position": 0,
+          "ranking": {
+            "reasons": [],
+            "rejected": false,
+            "score": null
+          },
+          "release": {
+            "artists": [],
+            "catalog_number": null,
+            "label": null,
+            "tags": [],
+            "title": "Artist - Track (Extended Mix) FLAC WEB",
+            "year": null
+          },
+          "schema": "iwantit.acquisition-candidate/2",
+          "source": "Jackett",
+          "source_url": null,
+          "title": "Artist - Track (Extended Mix) FLAC WEB"
+        }
+      ],
+      "dispatch": {},
+      "error": null,
+      "item_id": "item-1",
+      "preview_result_id": "sha256:f6d03291ca4169afd419f0d63ca211476241281bc2c11fb47636d1cada663503",
+      "selected": null,
+      "status": "choice_required",
+      "subject": {
+        "authority_id": "xref:authority:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "authority_revision": {
+          "event_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "sequence": 42
+        },
+        "entity_kind": "music.recording",
+        "exactness": "exact",
+        "identity_explanation_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "local_id": "xref:entity:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "portable_refs": [
+          "musicbrainz:recording:81c386f6-ecde-480e-8f8d-7af94af61f13"
+        ],
+        "schema_version": "err.subject/1.0"
+      },
+      "verification": {
+        "ownership_update_allowed": false,
+        "required": false,
+        "status": "not_applicable"
+      }
+    }
+  ],
+  "privacy": {
+    "classification": "local_private",
+    "community_publish_allowed": false,
+    "persistence": "sanitized_local",
+    "private_source_evidence_accepted": false,
+    "provider_payloads_exportable": false,
+    "remote_inference_allowed": false
+  },
+  "result_id": "sha256:5ff8b279d6393cc4a649a6149c1af54a923ab49ae3af5b115e9fa3b8084a63ee",
+  "schema": "iwantit.acquisition-result/2",
+  "side_effects_allowed": false,
+  "status": "previewed"
+}
