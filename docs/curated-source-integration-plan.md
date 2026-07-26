@@ -126,9 +126,9 @@ Compatibility rules:
 | I1 contract hardening | `iwantit-ztl.2` | Complete | `5d07a55af4415552ecd8f61bc7cc4fb9837fad9f`; 55 scoped and 99 full tests |
 | I2 MetaMusic/ERR fixtures | `iwantit-ztl.3` | Complete | `7331764c2af1affa1d979f980f14067452201fba`; 5 schemas, 41 fixtures, 18 scenarios, 4 replay pairs |
 | I3 comment-ranking retirement | `iwantit-ztl.4` | Complete | `96ed44581efc0448bdbdf42a57e50f3a13452418`; 3 policy tests |
-| I4 release gate | `iwantit-ztl.5` | In progress | Tracked dogfood evidence passes; final full gates, Beads close, sync/rebase/push remain |
-| X6 explicit acquisition | `iwantit-ztl.2/.3/.5` | Locally complete; release pending | Lifecycle, canonical fixtures, and real stdio/loopback dogfood pass |
-| X7 IWantIt privacy boundary | `iwantit-ztl.2/.3/.5` | Locally complete; release pending | Refusal, schema, journal, fixture, output, persistence, and dogfood privacy probes pass |
+| I4 release gate | `iwantit-ztl.5` | Complete | 100 unit tests plus functional, compile, fixture, dogfood, privacy, ERR-owner, and diff gates pass |
+| X6 explicit acquisition | `iwantit-ztl.2/.3/.5` | Complete for IWantIt | Lifecycle, canonical fixtures, and real stdio/loopback dogfood pass |
+| X7 IWantIt privacy boundary | `iwantit-ztl.2/.3/.5` | Complete for IWantIt | Refusal, schema, journal, fixture, output, persistence, and dogfood privacy probes pass |
 
 ## Planned implementation slices
 
@@ -425,3 +425,54 @@ contain only sanitized/offline data.
     adapter remains v1 and is outside this repository
 - Remaining: final full I4 gates, release ledger update, Beads close,
   pull/rebase, `bd sync`, push, prune, and upstream verification
+
+### Final release gate / I4 and Program Completion Gate
+
+- Tasks: I4, the IWantIt-owned X6/X7 completion evidence, and IWantIt's Program
+  Completion Gate
+- Accepted program commits before this release-ledger update:
+  - `d90f0c19ac2a91491d2935a3bb7eb06fdcb5b502` — baseline and living ledger
+  - `96ed44581efc0448bdbdf42a57e50f3a13452418` — comment-ranking retirement
+  - `5d07a55af4415552ecd8f61bc7cc4fb9837fad9f` — explicit v2 lifecycle
+  - `4994092b0403e1d2ffabe2cd57008088008f8231` — lifecycle evidence and ISA
+  - `7331764c2af1affa1d979f980f14067452201fba` — canonical schemas,
+    fixtures, verifier, and dogfood harness
+  - `a1cf9180a6367c456c4a12a3cdbe9742f9bd32ac` — v2 consumer documentation
+  - `5463739dcb0dabead28ff79ef9d31087712e8876` — retained conformance
+    evidence and external capability state
+- Final post-documentation verification:
+  - `python3 -W error::ResourceWarning -m unittest discover -s tests` ->
+    100 passed
+  - `python3 scripts/functional_test.py --verbose` -> passed
+  - `python3 -m compileall -q iwantit scripts tests` -> passed
+  - `python3 scripts/verify_curated_acquisition_fixtures.py` -> 5 schemas,
+    41 fixtures, 18 scenarios, 4 replay pairs; passed
+  - `python3 scripts/dogfood_curated_acquisition.py --output-dir
+    <temporary-directory>` -> passed with digest
+    `b945ef839a23a83a939205639d0b4754c473606385d21cd7af4d03f2709aa9b0`
+  - `cmp docs/evidence/curated-acquisition/curated-acquisition-dogfood.json
+    <temporary-directory>/curated-acquisition-dogfood.json` -> byte-identical
+  - focused sentinel scan over retained evidence and all generated result
+    fixtures -> no match
+  - `cmp schemas/curated-acquisition/v2/err-subject-owner.schema.json
+    /data/projects/ERR/schemas/subject-envelope.schema.json` ->
+    byte-identical
+  - `git diff --check` -> passed
+- Beads:
+  - `iwantit-ztl.1` through `iwantit-ztl.5` are closed
+  - epic `iwantit-ztl` is closed
+- Protected state:
+  - user-owned `README.md`, `.agent/`, and `uv.lock` remain outside every
+    program commit
+- External capability state:
+  - ERR canonical subjects/maps are available and IWantIt's owner snapshot
+    matches; live verification correctly remains an ERR call
+  - MetaMusic's committed acquisition adapter remains v1, so live v2
+    interoperability is not claimed; canonical IWantIt v2 fixtures and the
+    real offline stdio fallback pass and are ready for its M6 consumer work
+  - Sensemaker remains the sole editor of the central dossier/log; no central
+    file was edited by this task
+- Locally executable remaining work: none
+- Landing requirement: run `git pull --rebase`, `bd sync`, push, remote prune,
+  and verify zero ahead/behind while preserving the protected dirty paths in
+  this same session
