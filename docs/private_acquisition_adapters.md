@@ -8,14 +8,21 @@ or remote inference.
 
 All three paths preserve the same interaction:
 
-1. MetaMusic sends an `iwantit.acquisition-intent/1` preview.
+1. MetaMusic sends an `iwantit.acquisition-intent/2` preview containing an
+   exact authority-qualified `err.subject/1.0` recording.
 2. IWantIt searches enabled sources and returns only
-   `iwantit.acquisition-candidate/1` projections.
+   `iwantit.acquisition-candidate/2` projections with no provider URL.
 3. The user selects an exact candidate and explicitly confirms it.
-4. MetaMusic resubmits the same intent id with `action=dispatch`,
-   `confirmation.approved=true`, and the selected index.
-5. IWantIt journals that intent before a provider-side action. Replays return
-   the prior sanitized result instead of enqueueing a duplicate.
+4. MetaMusic resubmits the same intent and item IDs with `action=dispatch`,
+   the retained `preview_result_id`, the chosen `candidate_ref`, and a separate
+   confirmation bound to both.
+5. IWantIt journals the item before a provider-side action. Completed replays
+   return the prior sanitized result instead of enqueueing a duplicate.
+6. A successful result remains `pending_err_verification` and cannot authorize
+   a MetaMusic ownership update by itself.
+
+The legacy v1 numeric-index flow remains available for existing local callers
+only. MetaMusic curated-source consumers must use v2.
 
 `IWANTIT_PRIVATE_ACQUISITION_DISABLED=1` is the process-wide emergency stop.
 It disables search and dispatch for Prowlarr, Jackett, and Soulseek. Each
@@ -34,8 +41,16 @@ acquisition:
   idempotency_enabled: true
   # Omit for ~/.local/state/iwantit/acquisition-dispatch.sqlite3.
   idempotency_path: null
-  # Exceeds the bounded connector retry window; permits crash recovery afterward.
+  # An expired v2 dispatch lease requires reconciliation; it is never retry authority.
   lease_seconds: 900
+  trusted_callers:
+    - application: metamusic
+      instance_id: metamusic-local-1
+      pairing_id: pairing-local-1
+      pairing_revision: 1
+      workspace_id: workspace-1
+      actor_id: actor-1
+      active: true
 
 prowlarr:
   enabled: true
@@ -131,25 +146,35 @@ Official references: [slskd repository](https://github.com/slskd/slskd) and
 - Retry budgets are bounded. Provider concurrency and request rates are
   configurable per connector.
 - An exact-version request with no exact match produces no candidate unless
-  `desired.allow_substitution=true` was explicitly requested.
+  substitution is explicitly allowed by a legacy local request. Curated v2
+  requires `exact_version=true` and `allow_substitution=false`.
 - Cross-provider results are kept separate. Filename similarity never merges
   private dispatch coordinates or turns observations into canonical identity.
-- A failed dispatch journal entry may be retried. A completed one is replayed.
-  An abandoned in-progress lease becomes retryable after the configured lease.
-  Reusing an intent id for a different recording, format, policy, or selection
-  fails closed.
+- A failed v2 dispatch may be retried only when the failure explicitly attests
+  that no side effect was possible. A completed one is replayed.
+- An adapter exception, unattested failure, or abandoned in-progress lease
+  becomes non-retryable `DISPATCH_OUTCOME_UNCERTAIN`; reconcile the provider
+  before any new intent.
+- Reusing stable intent/item identifiers for a different subject, constraint,
+  policy, preview, selection, or confirmation fails closed.
+- Pre-dispatch cancellation is durable. Post-dispatch provider cancellation is
+  honestly reported unsupported by the cross-provider v2 contract.
 
 ## Verification
 
 Run the offline conformance and process-restart suite:
 
 ```bash
-PYTHONPATH=. uv run pytest -q tests/test_private_adapters.py \
-  tests/test_acquisition_journal.py tests/test_acquisition.py
+python3 -W error::ResourceWarning -m unittest \
+  tests.test_private_adapters tests.test_acquisition_journal \
+  tests.test_acquisition tests.test_curated_acquisition
+python3 scripts/verify_curated_acquisition_fixtures.py
+python3 scripts/dogfood_curated_acquisition.py --output-dir <evidence-directory>
 ```
 
-Fixtures cover Torznab XML and slskd JSON without making live provider calls.
-The journal suite starts a second Python process against the same SQLite state
-to verify restart-safe replay. Live searches should be performed only after the
-operator verifies the local endpoint, rate budget, source rules, and download
-destination.
+Fixtures cover Torznab XML, slskd JSON, v2 positive/negative consumer
+contracts, and restart-safe replay without making live provider calls. The
+dogfood harness invokes the actual CLI in separate processes against a
+loopback Jackett and download-client boundary. Live searches should be
+performed only after the operator verifies the local endpoint, trusted caller
+pairing, rate budget, source rules, rights policy, and download destination.

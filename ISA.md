@@ -30,8 +30,9 @@ user-owned and were not absorbed into program commits.
 
 The curated acquisition contract accepts the canonical ERR owner fixture for
 an authority-qualified exact `music.recording` subject and refuses bare,
-unknown-authority, non-exact, non-recording, stale/unsupported-major, and
-non-portable subjects item-by-item.
+structurally invalid, non-exact, non-recording, stale/unsupported-major, and
+non-portable subjects item-by-item. Authority trust and cross-authority mapping
+remain ERR-owned; IWantIt does not invent an authority allowlist.
 
 Probe:
 
@@ -57,8 +58,10 @@ python3 scripts/dogfood_curated_acquisition.py --output-dir <temporary-directory
 
 Stable intent/result/item IDs and idempotency keys survive process restart;
 completed dispatch replays without another provider call; conflicting reuse
-fails closed; failed attempts are retryable; pre-dispatch cancellation prevents
-dispatch; post-dispatch cancellation is reported honestly as unsupported.
+fails closed; only failures attested as side-effect-free are retryable;
+unattested or abandoned dispatches require reconciliation; pre-dispatch
+cancellation prevents dispatch; post-dispatch cancellation is reported
+honestly as unsupported.
 
 Probe:
 
@@ -120,8 +123,9 @@ python3 scripts/verify_curated_acquisition_fixtures.py
 IWantIt publishes versioned schemas and positive and negative fixtures for
 MetaMusic and ERR consumers covering capabilities, preview, refusal,
 confirmation, dispatch, replay, cancellation, partial item errors, authority
-mismatch, and private-evidence rejection. A repository verifier validates
-every fixture against the owner schema and scenario invariants.
+qualification/structural errors, and private-evidence rejection. A repository
+verifier validates every fixture against the owner schema and scenario
+invariants.
 
 Probe:
 

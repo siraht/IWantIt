@@ -1,22 +1,48 @@
 # ERR integration boundary
 
-The adjacent ERR/xref project is a referential identity kernel, not a download,
-availability, or ownership tracker. Its current release entities and version
-relations are music-specific; it has no books domain pack or possession lifecycle.
+ERR/xref is the owner of referential identity and subject-map semantics. It is
+not a download, availability, transfer, or ownership tracker. IWantIt does not
+read ERR internals or treat its event log as acquisition state.
 
-IWantIt therefore does not read ERR internals or use its event log as acquisition
-state. Responsibilities remain explicit:
+For curated music acquisition, IWantIt accepts the ERR-owned
+`err.subject/1.0` envelope at its process boundary and requires an
+authority-qualified exact `music.recording`. The envelope is embedded from the
+owner schema, separately validated, and preserved verbatim throughout preview,
+refusal, dispatch, replay, cancellation, and result fixtures. Search hints do
+not alter the subject. Original, remix, edit, dub, live, remaster, reissue, and
+bootleg versions remain distinct exact ERR subjects and are never merged by
+title/artist similarity.
 
-- IWantIt's acquisition journal owns requested, selected, dispatched, uncertain,
-  and completed workflow state.
-- Prowlarr and the download client own search results and transfer state.
-- `library_catalogs` providers own the current evidence that an ebook or audiobook
-  is possessed.
-- ERR may later provide conservative identity resolution across Goodreads, ISBN,
-  ASIN, Calibre, and Audiobookshelf references after a reviewed books domain pack
-  and stable public API exist.
+Responsibilities remain explicit:
 
-A future ERR integration should be an optional identity resolver invoked before
-catalog matching. It must consume ERR's public API, fail without disabling the
-local identifier/title-author matcher unless explicitly required, and never infer
-ownership merely because an ERR entity or identity assertion exists.
+- IWantIt's acquisition journal owns requested, previewed, selected,
+  dispatched, cancelled, uncertain, and completed workflow state.
+- Private indexers and download clients own observations and transfer state.
+- A successful IWantIt result contains only a minimized opaque provider
+  receipt and declares `pending_err_verification` with
+  `ownership_update_allowed=false`.
+- ERR owns the subsequent exact artifact-to-subject verification.
+- MetaMusic owns manifestation/library state and may mark an item owned only
+  after that verification succeeds.
+- Neither a subject envelope nor an acquisition handoff proves possession.
+
+Canonical IWantIt schemas and consumer fixtures are published under
+`schemas/curated-acquisition/v2/` and
+`fixtures/curated-acquisition/v2/`. The checked-in
+`err-subject-owner.schema.json` is a consumer snapshot; ERR remains its owner.
+The fixture verifier proves envelope preservation and the verification-required
+gate:
+
+```bash
+python3 scripts/verify_curated_acquisition_fixtures.py
+```
+
+Live `err.subject-map-batch/1.0` lookup and artifact verification are external
+capabilities. Until a live consumer is available, IWantIt reports
+`pending_err_verification` and never simulates ownership success.
+
+The books boundary remains unchanged: ERR currently has no reviewed books
+domain pack or possession lifecycle. `library_catalogs` providers own current
+ebook/audiobook possession evidence. A future books integration must use ERR's
+public API, fail conservatively, retain the local identifier/title-author
+fallback unless explicitly required, and never infer ownership from identity.
