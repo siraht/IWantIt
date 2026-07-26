@@ -12,10 +12,10 @@
     "uncertain_provider_attempts": 1
   },
   "fixtures": {
-    "fixtures": 41,
+    "fixtures": 51,
     "max_result_bytes": 2097152,
     "replay_pairs": 4,
-    "scenarios": 18,
+    "scenarios": 23,
     "schemas": 5,
     "status": "ok"
   },

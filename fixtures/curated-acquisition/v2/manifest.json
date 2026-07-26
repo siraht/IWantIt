@@ -86,6 +86,51 @@
       "result": "partial-item-error.result.json"
     },
     {
+      "expected_error": "INVALID_ITEM",
+      "expected_item_status": "refused",
+      "expected_status": "refused",
+      "intent_schema_valid": false,
+      "name": "refusal-bare-subject",
+      "request": "refusal-bare-subject.intent.json",
+      "result": "refusal-bare-subject.result.json"
+    },
+    {
+      "expected_error": "INVALID_ITEM",
+      "expected_item_status": "refused",
+      "expected_status": "refused",
+      "intent_schema_valid": false,
+      "name": "refusal-malformed-authority-subject",
+      "request": "refusal-malformed-authority-subject.intent.json",
+      "result": "refusal-malformed-authority-subject.result.json"
+    },
+    {
+      "expected_error": "INVALID_ITEM",
+      "expected_item_status": "refused",
+      "expected_status": "refused",
+      "intent_schema_valid": false,
+      "name": "refusal-unsupported-subject-version",
+      "request": "refusal-unsupported-subject-version.intent.json",
+      "result": "refusal-unsupported-subject-version.result.json"
+    },
+    {
+      "expected_error": "EXACT_RECORDING_REQUIRED",
+      "expected_item_status": "refused",
+      "expected_status": "refused",
+      "intent_schema_valid": true,
+      "name": "refusal-non-recording-subject",
+      "request": "refusal-non-recording-subject.intent.json",
+      "result": "refusal-non-recording-subject.result.json"
+    },
+    {
+      "expected_error": "NON_PORTABLE_IDENTITY_EVIDENCE",
+      "expected_item_status": "refused",
+      "expected_status": "refused",
+      "intent_schema_valid": true,
+      "name": "refusal-non-portable-subject",
+      "request": "refusal-non-portable-subject.intent.json",
+      "result": "refusal-non-portable-subject.result.json"
+    },
+    {
       "expected_error": "PRIVATE_SOURCE_EVIDENCE_FORBIDDEN",
       "expected_item_status": "refused",
       "expected_status": "refused",

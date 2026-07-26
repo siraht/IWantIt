@@ -1,0 +1,76 @@
+{
+  "action": "preview",
+  "caller": {
+    "actor_id": "actor-1",
+    "application": "metamusic",
+    "instance_id": "metamusic-local-1",
+    "origin": {
+      "interaction_id": "interaction-1",
+      "kind": "explicit_user_acquisition"
+    },
+    "pairing_id": "pairing-local-1",
+    "pairing_revision": 1,
+    "workspace_id": "workspace-1"
+  },
+  "idempotency_key": "idempotency-fixture-non-recording",
+  "intent_id": "fixture-non-recording",
+  "items": [
+    {
+      "constraints": {
+        "allow_substitution": false,
+        "destination": {
+          "kind": "metamusic_staging",
+          "ref": "staging-target-1"
+        },
+        "exact_version": true,
+        "formats": [
+          "FLAC"
+        ],
+        "media": [
+          "WEB"
+        ],
+        "policy": {
+          "authorized_sources_only": true,
+          "policy_version": "acquisition-policy-1",
+          "private": true
+        },
+        "rights": {
+          "basis": "user_authorized",
+          "policy_ref": "rights-policy-1"
+        },
+        "sources": {
+          "allowed_providers": [
+            "jackett"
+          ],
+          "excluded_providers": [
+            "soulseek"
+          ]
+        }
+      },
+      "item_id": "item-1",
+      "search_hints": {
+        "artist": "Artist",
+        "release": "Release",
+        "title": "Track",
+        "version": "Extended Mix",
+        "year": 2026
+      },
+      "subject": {
+        "authority_id": "xref:authority:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "authority_revision": {
+          "event_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "sequence": 42
+        },
+        "entity_kind": "music.release",
+        "exactness": "exact",
+        "identity_explanation_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "local_id": "xref:entity:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "portable_refs": [
+          "musicbrainz:recording:81c386f6-ecde-480e-8f8d-7af94af61f13"
+        ],
+        "schema_version": "err.subject/1.0"
+      }
+    }
+  ],
+  "schema": "iwantit.acquisition-intent/2"
+}

@@ -311,6 +311,67 @@ class CuratedAcquisitionTests(TestCase):
         self.assertEqual(result["items"][1]["status"], "choice_required")
         self.assertEqual(len(self.runner.calls), 1)
 
+    def test_subject_boundary_returns_typed_minimized_refusals(self) -> None:
+        bare = item()
+        bare["subject"] = "xref:entity:01ARZ3NDEKTSV4RRFFQ69G5FAV"
+
+        malformed_authority = item()
+        malformed_authority["subject"].pop("authority_id")
+
+        unsupported_subject_version = item()
+        unsupported_subject_version["subject"]["schema_version"] = "err.subject/99.0"
+
+        non_recording = item()
+        non_recording["subject"]["entity_kind"] = "music.release"
+
+        non_portable = item()
+        non_portable["subject"]["portable_refs"] = [
+            "xref:entity:01ARZ3NDEKTSV4RRFFQ69G5FAV"
+        ]
+
+        cases = (
+            ("bare", bare, "INVALID_ITEM", None),
+            (
+                "malformed_authority",
+                malformed_authority,
+                "INVALID_ITEM",
+                None,
+            ),
+            (
+                "unsupported_subject_version",
+                unsupported_subject_version,
+                "INVALID_ITEM",
+                None,
+            ),
+            (
+                "non_recording",
+                non_recording,
+                "EXACT_RECORDING_REQUIRED",
+                non_recording["subject"],
+            ),
+            (
+                "non_portable",
+                non_portable,
+                "NON_PORTABLE_IDENTITY_EVIDENCE",
+                non_portable["subject"],
+            ),
+        )
+
+        for name, request_item, expected_code, expected_subject in cases:
+            with self.subTest(name=name):
+                result = self.service.handle(intent(items=[request_item]))
+                Draft202012Validator(ACQUISITION_RESULT_SCHEMA).validate(result)
+                self.assertEqual(result["status"], "refused")
+                self.assertEqual(
+                    result["items"][0]["error"]["code"],
+                    expected_code,
+                )
+                self.assertEqual(
+                    result["items"][0]["subject"],
+                    expected_subject,
+                )
+        self.assertEqual(self.runner.calls, [])
+
     def test_private_source_evidence_is_refused_without_echoing_value(self) -> None:
         private = item()
         private["source_handle"] = "secret-curator-handle"

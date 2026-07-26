@@ -4,7 +4,9 @@ This directory is the canonical IWantIt-owned conformance corpus for
 MetaMusic callers and ERR ownership-verification consumers. It covers the
 explicit preview, retained choice, item-bound confirmation, dispatch, replay,
 cancellation, partial batch, safe retry, uncertain outcome, pairing,
-version-negotiation, provider, ingestion-origin, and private-evidence paths.
+version-negotiation, provider, ingestion-origin, private-evidence, bare subject,
+malformed authority envelope, unsupported subject version, non-recording
+subject, and non-portable identity paths.
 
 The adjacent `manifest.json` records the expected status and typed error for
 each scenario. Subjects use the ERR-owned `err.subject/1.0` envelope and must

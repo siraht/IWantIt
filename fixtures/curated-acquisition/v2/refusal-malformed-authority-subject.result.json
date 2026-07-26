@@ -1,0 +1,40 @@
+{
+  "action": "preview",
+  "error": null,
+  "intent_id": "fixture-malformed-authority",
+  "items": [
+    {
+      "candidates": [],
+      "dispatch": {},
+      "error": {
+        "category": "contract",
+        "code": "INVALID_ITEM",
+        "item_id": "item-1",
+        "message": "Invalid acquisition contract at subject.",
+        "retryable": false
+      },
+      "item_id": "item-1",
+      "preview_result_id": null,
+      "selected": null,
+      "status": "refused",
+      "subject": null,
+      "verification": {
+        "ownership_update_allowed": false,
+        "required": false,
+        "status": "not_applicable"
+      }
+    }
+  ],
+  "privacy": {
+    "classification": "local_private",
+    "community_publish_allowed": false,
+    "persistence": "sanitized_local",
+    "private_source_evidence_accepted": false,
+    "provider_payloads_exportable": false,
+    "remote_inference_allowed": false
+  },
+  "result_id": "sha256:857f4da4f42b80f0b76c52815c4b60d16a18a3bcbc4679dd204c8321299a4615",
+  "schema": "iwantit.acquisition-result/2",
+  "side_effects_allowed": false,
+  "status": "refused"
+}

@@ -11,7 +11,8 @@ class CuratedAcquisitionFixtureTests(unittest.TestCase):
 
         self.assertEqual(summary["status"], "ok")
         self.assertEqual(summary["schemas"], 5)
-        self.assertGreaterEqual(summary["scenarios"], 18)
+        self.assertEqual(summary["fixtures"], 51)
+        self.assertEqual(summary["scenarios"], 23)
         self.assertEqual(summary["replay_pairs"], 4)
 
 

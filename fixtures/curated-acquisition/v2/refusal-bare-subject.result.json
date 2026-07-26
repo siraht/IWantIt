@@ -1,0 +1,40 @@
+{
+  "action": "preview",
+  "error": null,
+  "intent_id": "fixture-bare-subject",
+  "items": [
+    {
+      "candidates": [],
+      "dispatch": {},
+      "error": {
+        "category": "contract",
+        "code": "INVALID_ITEM",
+        "item_id": "item-1",
+        "message": "Invalid acquisition contract at subject.",
+        "retryable": false
+      },
+      "item_id": "item-1",
+      "preview_result_id": null,
+      "selected": null,
+      "status": "refused",
+      "subject": null,
+      "verification": {
+        "ownership_update_allowed": false,
+        "required": false,
+        "status": "not_applicable"
+      }
+    }
+  ],
+  "privacy": {
+    "classification": "local_private",
+    "community_publish_allowed": false,
+    "persistence": "sanitized_local",
+    "private_source_evidence_accepted": false,
+    "provider_payloads_exportable": false,
+    "remote_inference_allowed": false
+  },
+  "result_id": "sha256:76b61a46fe4539e214d49d4653dbe7efdac0cbe78339f7b4b0cbf12b3104d3e8",
+  "schema": "iwantit.acquisition-result/2",
+  "side_effects_allowed": false,
+  "status": "refused"
+}

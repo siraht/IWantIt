@@ -212,6 +212,84 @@ def generate(output_root: Path) -> None:
         if len(runner.calls) != 1:
             raise AssertionError("partial batch discarded or executed an invalid item")
 
+        subject_refusals = (
+            (
+                "refusal-bare-subject",
+                "fixture-bare-subject",
+                "INVALID_ITEM",
+                lambda value: value.__setitem__(
+                    "subject",
+                    "xref:entity:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+                ),
+                False,
+            ),
+            (
+                "refusal-malformed-authority-subject",
+                "fixture-malformed-authority",
+                "INVALID_ITEM",
+                lambda value: value["subject"].pop("authority_id"),
+                False,
+            ),
+            (
+                "refusal-unsupported-subject-version",
+                "fixture-unsupported-subject-version",
+                "INVALID_ITEM",
+                lambda value: value["subject"].__setitem__(
+                    "schema_version",
+                    "err.subject/99.0",
+                ),
+                False,
+            ),
+            (
+                "refusal-non-recording-subject",
+                "fixture-non-recording",
+                "EXACT_RECORDING_REQUIRED",
+                lambda value: value["subject"].__setitem__(
+                    "entity_kind",
+                    "music.release",
+                ),
+                True,
+            ),
+            (
+                "refusal-non-portable-subject",
+                "fixture-non-portable",
+                "NON_PORTABLE_IDENTITY_EVIDENCE",
+                lambda value: value["subject"].__setitem__(
+                    "portable_refs",
+                    ["xref:entity:01ARZ3NDEKTSV4RRFFQ69G5FAV"],
+                ),
+                True,
+            ),
+        )
+        for (
+            scenario_name,
+            intent_id,
+            expected_error,
+            mutate,
+            schema_valid,
+        ) in subject_refusals:
+            service, runner = _service(temp_dir, scenario_name)
+            refusal_item = acquisition_item()
+            mutate(refusal_item)
+            refusal = acquisition_intent(
+                intent_id=intent_id,
+                items=[refusal_item],
+            )
+            refusal_result = service.handle(refusal)
+            record(
+                scenario_name,
+                refusal,
+                refusal_result,
+                expected_status="refused",
+                expected_item_status="refused",
+                expected_error=expected_error,
+                intent_valid=schema_valid,
+            )
+            if runner.calls:
+                raise AssertionError(
+                    f"invalid subject reached the runner: {scenario_name}"
+                )
+
         service, runner = _service(temp_dir, "private")
         private_item = acquisition_item()
         private_item["source_handle"] = "fixture-private-handle"

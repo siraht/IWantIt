@@ -287,10 +287,9 @@ class CuratedAcquisitionService:
                 item_results.append(
                     self._item_error_result(
                         item_id=item_id,
-                        subject=(
+                        subject=self._safe_result_subject(
                             raw_item.get("subject")
                             if isinstance(raw_item, dict)
-                            and isinstance(raw_item.get("subject"), dict)
                             else None
                         ),
                         error=validation_error,
@@ -346,6 +345,16 @@ class CuratedAcquisitionService:
         path = ".".join(str(part) for part in error.absolute_path)
         location = path or "request"
         return f"Invalid acquisition contract at {location}."
+
+    @staticmethod
+    def _safe_result_subject(value: Any) -> dict[str, Any] | None:
+        """Echo only a structurally valid owner subject into a closed result."""
+
+        if not isinstance(value, dict):
+            return None
+        if not Draft202012Validator(ERR_SUBJECT_SCHEMA).is_valid(value):
+            return None
+        return value
 
     def _validate_item(
         self,
