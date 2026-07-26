@@ -124,11 +124,11 @@ Compatibility rules:
 |---|---|---|---|
 | I0 baseline, Beads, plan | `iwantit-ztl.1` | Complete | `d90f0c19ac2a91491d2935a3bb7eb06fdcb5b502` |
 | I1 contract hardening | `iwantit-ztl.2` | Complete | `5d07a55af4415552ecd8f61bc7cc4fb9837fad9f`; 55 scoped and 99 full tests |
-| I2 MetaMusic/ERR fixtures | `iwantit-ztl.3` | Complete | `7331764c2af1affa1d979f980f14067452201fba`; 5 schemas, 41 fixtures, 18 scenarios, 4 replay pairs |
+| I2 MetaMusic/ERR fixtures | `iwantit-ztl.3` | Complete, expanded by completion remediation | Base `7331764c2af1affa1d979f980f14067452201fba`; subject-boundary expansion `dbe3d65d56da5e3aa27fcc2832e44c425f8a04f0`; current verifier: 5 schemas, 51 fixtures, 23 scenarios, 4 replay pairs |
 | I3 comment-ranking retirement | `iwantit-ztl.4` | Complete | `96ed44581efc0448bdbdf42a57e50f3a13452418`; 3 policy tests |
-| I4 release gate | `iwantit-ztl.5` | Complete | 100 unit tests plus functional, compile, fixture, dogfood, privacy, ERR-owner, and diff gates pass |
-| X6 explicit acquisition | `iwantit-ztl.2/.3/.5` | Complete for IWantIt | Lifecycle, canonical fixtures, and real stdio/loopback dogfood pass |
-| X7 IWantIt privacy boundary | `iwantit-ztl.2/.3/.5` | Complete for IWantIt | Refusal, schema, journal, fixture, output, persistence, and dogfood privacy probes pass |
+| I4 release gate | `iwantit-ztl.5` | Reopened for LifeOS evidence landing | 101 corrected unit tests plus all phase gates pass; ISC-IW-12 landing remains |
+| X6 explicit acquisition | `iwantit-ztl.2/.3/.5` | Functionally complete; evidence landing pending | Lifecycle, canonical fixtures, and real stdio/loopback dogfood pass |
+| X7 IWantIt privacy boundary | `iwantit-ztl.2/.3/.5` | Functionally complete; evidence landing pending | Refusal, schema, journal, fixture, output, persistence, and dogfood privacy probes pass |
 
 ## Planned implementation slices
 
@@ -498,3 +498,50 @@ contain only sanitized/offline data.
   pull/rebase, Beads sync, push, prune, and zero-ahead/behind verification; its
   final remote hash is reported in the task handoff because a commit cannot
   contain its own hash.
+
+### LifeOS completion-gate remediation / I4 reopened
+
+- Trigger: the LifeOS stop hook correctly reported that `ISA.md` declared
+  probes but did not record criterion-by-criterion results.
+- Observation: rerunning the verbose identity probe also found an untested
+  result-construction edge. A structurally invalid subject dictionary was
+  refused by item validation but could then be echoed into a result whose
+  closed subject schema rejected it.
+- Decision: invalid/bare subjects are minimized to `subject=null` in the typed
+  refusal; structurally valid non-exact/non-recording/non-portable subjects may
+  remain in item-scoped evidence. Authority freshness/trust remains ERR-owned
+  and is no longer overclaimed in the ISC wording.
+- Canonical corpus expansion: bare subject, malformed authority envelope,
+  unsupported subject version, non-recording subject, and non-portable
+  identity scenarios. None reaches the provider runner.
+- Implementation/conformance commit:
+  `dbe3d65d56da5e3aa27fcc2832e44c425f8a04f0`.
+- Files:
+  `iwantit/curated_acquisition.py`,
+  `tests/test_curated_acquisition.py`,
+  `tests/test_curated_acquisition_fixtures.py`,
+  `scripts/generate_curated_acquisition_fixtures.py`,
+  `fixtures/curated-acquisition/v2/`,
+  `docs/evidence/curated-acquisition/curated-acquisition-dogfood.json`,
+  `ISA.md`, this plan, and Beads.
+- Direct corrected-state evidence:
+  - verbose curated lifecycle -> 22 passed
+  - curated lifecycle plus journal -> 26 passed
+  - privacy-focused suite -> 56 passed
+  - comment policy -> 3 passed
+  - full unit discovery -> 101 passed
+  - existing functional harness and compileall -> passed
+  - canonical verifier -> 5 schemas, 51 fixtures, 23 scenarios, 4 replay
+    pairs; passed
+  - real CLI/loopback dogfood -> passed; retained evidence SHA-256
+    `a21d885f9eb98bbb233aea8ab8760633744995528504f571c66968ad221b1bde`
+  - broad sentinel inventory -> matches confined to synthetic test-input and
+    assertion/verifier source
+  - strict retained result/evidence sentinel scan -> no matches
+  - ERR owner subject schema byte comparison and `git diff --check` -> passed
+- Lesson: a green implementation ledger is not a substitute for recording
+  evidence under each falsifiable ISC. The missing evidence review also
+  exposed a real closed-result edge that aggregate tests had not covered.
+- Status: ISC-IW-01 through ISC-IW-11 have direct evidence in `ISA.md`.
+  ISC-IW-12 is explicitly deferred to the landing sequence; I4 and the epic
+  remain reopened until that probe passes.
