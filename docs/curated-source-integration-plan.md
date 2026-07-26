@@ -126,9 +126,9 @@ Compatibility rules:
 | I1 contract hardening | `iwantit-ztl.2` | Complete | `5d07a55af4415552ecd8f61bc7cc4fb9837fad9f`; 55 scoped and 99 full tests |
 | I2 MetaMusic/ERR fixtures | `iwantit-ztl.3` | Complete, expanded by completion remediation | Base `7331764c2af1affa1d979f980f14067452201fba`; subject-boundary expansion `dbe3d65d56da5e3aa27fcc2832e44c425f8a04f0`; current verifier: 5 schemas, 51 fixtures, 23 scenarios, 4 replay pairs |
 | I3 comment-ranking retirement | `iwantit-ztl.4` | Complete | `96ed44581efc0448bdbdf42a57e50f3a13452418`; 3 policy tests |
-| I4 release gate | `iwantit-ztl.5` | Reopened for LifeOS evidence landing | 101 corrected unit tests plus all phase gates pass; ISC-IW-12 landing remains |
-| X6 explicit acquisition | `iwantit-ztl.2/.3/.5` | Functionally complete; evidence landing pending | Lifecycle, canonical fixtures, and real stdio/loopback dogfood pass |
-| X7 IWantIt privacy boundary | `iwantit-ztl.2/.3/.5` | Functionally complete; evidence landing pending | Refusal, schema, journal, fixture, output, persistence, and dogfood privacy probes pass |
+| I4 release gate | `iwantit-ztl.5` | Complete after LifeOS evidence remediation | 101 corrected unit tests, all phase gates, per-ISC evidence, and ISC-IW-12 landing pass |
+| X6 explicit acquisition | `iwantit-ztl.2/.3/.5` | Complete for IWantIt | Lifecycle, canonical fixtures, real stdio/loopback dogfood, and direct ISA evidence pass |
+| X7 IWantIt privacy boundary | `iwantit-ztl.2/.3/.5` | Complete for IWantIt | Refusal, schema, journal, fixture, output, persistence, dogfood, and direct ISA privacy probes pass |
 
 ## Planned implementation slices
 
@@ -542,6 +542,17 @@ contain only sanitized/offline data.
 - Lesson: a green implementation ledger is not a substitute for recording
   evidence under each falsifiable ISC. The missing evidence review also
   exposed a real closed-result edge that aggregate tests had not covered.
-- Status: ISC-IW-01 through ISC-IW-11 have direct evidence in `ISA.md`.
-  ISC-IW-12 is explicitly deferred to the landing sequence; I4 and the epic
-  remain reopened until that probe passes.
+- First landing evidence:
+  - Beads I4/epic closed after post-evidence full gates
+  - clean-worktree pull/rebase at
+    `7710e0feec464130722a23562a3098ac949a247d` -> up to date and hash unchanged
+  - `bd sync` -> JSONL current
+  - push -> `08053d8..7710e0f master -> master`
+  - prune/fetch, ahead/behind `0 0`, local=remote at `7710e0f`, zero unpushed
+    commits/stashes/uncommitted program files/protected committed paths
+  - full status -> branch up to date with origin and only protected
+    `README.md`, `.agent/`, and `uv.lock` dirty
+- Status: ISC-IW-01 through ISC-IW-12 now have direct PASS evidence in
+  `ISA.md`. The final PASS annotation is documentation-only and is landed with
+  the same sequence; its self-unrecordable hash is reported in the task
+  handoff.

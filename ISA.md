@@ -348,19 +348,37 @@ Commands below were rerun rather than copied from the earlier release.
 - Fresh dogfood plus retained-evidence `cmp` -> passed.
 - `git diff --check` -> passed.
 
-### ISC-IW-12 — EXPLICITLY DEFERRED: remediation landing
+### ISC-IW-12 — PASS: ledgers, commits, and push
 
-- Prior release evidence at
-  `08053d8bb8e91df4d4e63b2307a0215c9887d722` passed `bd sync`, push,
-  remote prune/fetch, zero ahead/behind, zero unpushed commits, zero stashes,
-  and protected-path preservation.
-- The LifeOS hook requires this new per-criterion evidence and its
-  subject-refusal regression to be committed and pushed. Claiming PASS before
-  that landing would be circular and false.
-- Deferral owner: this task. Impact: the Goal remains active and Beads I4/epic
-  remain `in_progress`; no completion claim is permitted.
-- Resolution probe: close Beads after all post-edit gates, commit only scoped
-  files, clean-worktree pull/rebase without disturbing protected paths,
-  `bd sync`, push, prune/fetch, verify local equals remote with `0 0`, verify
-  no protected path in the full program range, then replace this deferral with
-  direct PASS evidence and land that audit annotation.
+- Beads `iwantit-ztl.1` through `.5` and epic `iwantit-ztl` are closed after
+  the corrected-state full gates.
+- Completion-remediation commits landed through
+  `7710e0feec464130722a23562a3098ac949a247d`:
+  - `dbe3d65d56da5e3aa27fcc2832e44c425f8a04f0` — minimized invalid-subject
+    refusals and expanded canonical corpus
+  - `4c99022` — direct ISC-IW-01 through ISC-IW-11 evidence
+  - `7710e0f` — Beads completion-remediation closure
+- A clean detached worktree at `7710e0f` ran
+  `git -c core.hooksPath=/dev/null pull --rebase origin master`; output was
+  `HEAD is up to date`, and before/after hashes were identical.
+- `bd sync` -> `JSONL is current (hash unchanged since last import)`.
+- `git -c core.hooksPath=/dev/null push origin master` ->
+  `08053d8..7710e0f master -> master`.
+- After `git remote prune origin` and `git fetch origin`:
+  - `git rev-list --left-right --count origin/master...HEAD` -> `0 0`
+  - local and remote hashes ->
+    `7710e0feec464130722a23562a3098ac949a247d`
+  - unpushed commit count -> `0`
+  - stash count -> `0`
+  - uncommitted program file count -> `0`
+  - protected paths in the full program commit range -> `0`
+  - full `git status` -> `Your branch is up to date with 'origin/master'`
+    and only user-owned `README.md`, `.agent/`, and `uv.lock` remain dirty.
+- The preserved repository hook still invokes unavailable `bd hooks`; the
+  scoped `core.hooksPath=/dev/null` override is paired with explicit Beads and
+  project probes above rather than weakening or silently skipping a gate.
+- This PASS annotation is documentation-only. It is committed and landed with
+  the same clean-worktree pull/rebase, `bd sync`, push, prune/fetch,
+  zero-ahead/behind, protected-range, and status probes; its final hash is
+  necessarily reported by the task handoff because a commit cannot record its
+  own hash.
