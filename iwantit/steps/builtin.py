@@ -227,46 +227,6 @@ def _normalize_release_token(text: str) -> str:
     return _normalize_text(text)
 
 
-class _CommentHTMLParser(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self._collect = False
-        self._depth = 0
-        self._current: list[str] = []
-        self.comments: list[str] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag != "div":
-            return
-        attrs_dict = {key: value for key, value in attrs}
-        div_id = attrs_dict.get("id") or ""
-        if div_id.startswith("content") and div_id[len("content") :].isdigit():
-            if not self._collect:
-                self._collect = True
-                self._depth = 1
-                return
-        if self._collect:
-            self._depth += 1
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag != "div":
-            return
-        if self._collect:
-            self._depth -= 1
-            if self._depth <= 0:
-                text = " ".join(self._current).strip()
-                if text:
-                    self.comments.append(text)
-                self._current = []
-                self._collect = False
-
-    def handle_data(self, data: str) -> None:
-        if self._collect:
-            cleaned = data.strip()
-            if cleaned:
-                self._current.append(cleaned)
-
-
 class _PageMetaParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -327,28 +287,6 @@ def _extract_page_meta(html: str) -> dict[str, str | None]:
     if description:
         description = html_lib.unescape(description)
     return {"title": title, "description": description}
-
-
-def _extract_comment_texts(html: str) -> list[str]:
-    parser = _CommentHTMLParser()
-    parser.feed(html)
-    return parser.comments
-
-
-def _comment_pages_from_html(html: str, group_id: int | None) -> int:
-    if not html:
-        return 1
-    if not group_id:
-        group_id = 0
-    pattern = rf"torrents\\.php\\?page=(\\d+)&amp;id={group_id}#comments"
-    matches = re.findall(pattern, html)
-    pages: list[int] = []
-    for num in matches:
-        try:
-            pages.append(int(num))
-        except (TypeError, ValueError):
-            continue
-    return max(pages) if pages else 1
 
 
 def _consensus_fields_from_results(
@@ -632,265 +570,35 @@ def redacted_enrich(
 def redacted_comments(
     data: dict[str, Any], step_cfg: dict[str, Any], context: Context
 ) -> dict[str, Any]:
-    request = data.get("request", {})
-    work = data.get("work", {})
-    media_type = work.get("media_type") or request.get("media_type")
-    enabled_media = step_cfg.get("enabled_media")
-    if isinstance(enabled_media, list) and media_type not in enabled_media:
-        return data
-    red_cfg = context.config.get("redacted", {}) or {}
-    api_key = red_cfg.get("api_key")
-    if not api_key:
-        return data
-    base_url = (red_cfg.get("url") or "https://redacted.sh").rstrip("/")
-    groups = (data.get("redacted") or {}).get("groups", {})
-    if not groups:
-        return data
-    session_cookie = red_cfg.get("session_cookie")
-
-    cache_cfg = step_cfg.get("cache") or {}
-    if isinstance(cache_cfg, bool):
-        cache_cfg = {"enabled": cache_cfg}
-    cache_enabled = bool(cache_cfg.get("enabled"))
-    max_pages = int(step_cfg.get("max_pages") or 1)
-
-    comments_map: dict[int, list[str]] = {}
-    for group_id in groups.keys():
-        group_comments: list[str] = []
-        page = 1
-        if cache_enabled:
-            cached = read_cache(cache_cfg.get("namespace", "redacted_comments"), cache_key({"group_id": group_id}), cache_cfg.get("ttl_seconds"))
-            if cached is not None:
-                comments_map[group_id] = cached
-                continue
-        # Attempt to discover comment pages from group response
-        payload = groups.get(group_id)
-        comment_pages = None
-        if isinstance(payload, dict):
-            response = payload.get("response") or {}
-            comment_pages = response.get("commentPages") or response.get("comment_pages")
-        if comment_pages:
-            try:
-                comment_pages = int(comment_pages)
-            except (TypeError, ValueError):
-                comment_pages = None
-        if comment_pages:
-            start = max(1, comment_pages - max_pages + 1)
-            pages = list(range(start, comment_pages + 1))
-        else:
-            pages = [page]
-
-        for page in pages:
-            url = f"{base_url}/ajax.php"
-            params = {"action": "torrentgroup", "id": group_id, "page": page}
-            try:
-                with provider_slot("redacted", provider_concurrency(context.config, "redacted")):
-                    enforce_rate_limit("redacted", provider_rate_limit(context.config, "redacted"))
-                    response = request_with_retry(
-                        "GET",
-                        url,
-                        headers={"Authorization": api_key},
-                        params=params,
-                        timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
-                        retries=int(step_cfg.get("retries") or 0),
-                        backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-                        max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-                        retry_statuses=step_cfg.get("retry_statuses"),
-                    )
-                response.raise_for_status()
-                payload = response.json()
-            except (requests.RequestException, json.JSONDecodeError) as exc:
-                message = _safe_error_message(exc)
-                data.setdefault("warnings", []).append(
-                    {
-                        "step": "redacted_comments",
-                        "type": exc.__class__.__name__,
-                        "message": message,
-                    }
-                )
-                break
-            resp = payload.get("response") or {}
-            comments = resp.get("comments") or []
-            for entry in comments:
-                if isinstance(entry, dict):
-                    text = entry.get("comment")
-                else:
-                    text = str(entry)
-                if text:
-                    group_comments.append(text)
-
-        if group_comments:
-            comments_map[group_id] = group_comments
-            if cache_enabled:
-                write_cache(cache_cfg.get("namespace", "redacted_comments"), cache_key({"group_id": group_id}), group_comments)
-
-    if not comments_map and session_cookie:
-        for group_id in groups.keys():
-            if cache_enabled:
-                cached = read_cache(cache_cfg.get("namespace", "redacted_comments"), cache_key({"group_id": group_id}), cache_cfg.get("ttl_seconds"))
-                if cached is not None:
-                    comments_map[group_id] = cached
-                    continue
-            url = f"{base_url}/torrents.php"
-            cookies = {"session": session_cookie}
-            try:
-                with provider_slot("redacted", provider_concurrency(context.config, "redacted")):
-                    enforce_rate_limit("redacted", provider_rate_limit(context.config, "redacted"))
-                    first = request_with_retry(
-                        "GET",
-                        url,
-                        params={"id": group_id},
-                        cookies=cookies,
-                        timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
-                        retries=int(step_cfg.get("retries") or 0),
-                        backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-                        max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-                        retry_statuses=step_cfg.get("retry_statuses"),
-                    )
-                first.raise_for_status()
-                html = first.text
-            except requests.RequestException as exc:
-                message = _safe_error_message(exc)
-                data.setdefault("warnings", []).append(
-                    {
-                        "step": "redacted_comments",
-                        "type": exc.__class__.__name__,
-                        "message": message,
-                    }
-                )
-                continue
-            total_pages = _comment_pages_from_html(html, group_id)
-            if step_cfg.get("max_pages") in ("all", 0) or max_pages == 0:
-                pages = range(1, total_pages + 1)
-            else:
-                start = max(1, total_pages - max_pages + 1)
-                pages = range(start, total_pages + 1)
-            group_comments = _extract_comment_texts(html)
-            if total_pages > 1:
-                for page in pages:
-                    if page == 1:
-                        continue
-                    try:
-                        with provider_slot("redacted", provider_concurrency(context.config, "redacted")):
-                            enforce_rate_limit("redacted", provider_rate_limit(context.config, "redacted"))
-                            resp = request_with_retry(
-                                "GET",
-                                url,
-                                params={"id": group_id, "page": page},
-                                cookies=cookies,
-                                timeout=step_cfg.get("timeout", red_cfg.get("timeout", 20)),
-                                retries=int(step_cfg.get("retries") or 0),
-                                backoff_seconds=float(step_cfg.get("retry_backoff_seconds") or 0.5),
-                                max_backoff_seconds=float(step_cfg.get("max_backoff_seconds") or 8.0),
-                                retry_statuses=step_cfg.get("retry_statuses"),
-                            )
-                        resp.raise_for_status()
-                    except requests.RequestException as exc:
-                        message = _safe_error_message(exc)
-                        data.setdefault("warnings", []).append(
-                            {
-                                "step": "redacted_comments",
-                                "type": exc.__class__.__name__,
-                                "message": message,
-                            }
-                        )
-                        break
-                    group_comments.extend(_extract_comment_texts(resp.text))
-            if group_comments:
-                comments_map[group_id] = group_comments
-                if cache_enabled:
-                    write_cache(cache_cfg.get("namespace", "redacted_comments"), cache_key({"group_id": group_id}), group_comments)
-
-    if comments_map:
-        store_comments = bool(step_cfg.get("store_comments", False))
-        if store_comments:
-            data.setdefault("redacted", {})["comments"] = comments_map
-        else:
-            data.setdefault("redacted", {})["comment_counts"] = {
-                str(group_id): len(comments)
-                for group_id, comments in comments_map.items()
-            }
-            data.setdefault("_internal", {})["redacted_comments"] = comments_map
+    del step_cfg, context
+    data.setdefault("warnings", []).append(
+        {
+            "step": "redacted_comments",
+            "type": "PolicyDisabled",
+            "code": "CURATION_BOUNDARY",
+            "message": (
+                "Private comment capture is disabled in IWantIt; capture and stance review "
+                "belong in Sensemaker."
+            ),
+        }
+    )
     return data
 
 
 def apply_recommendations(
     data: dict[str, Any], step_cfg: dict[str, Any], context: Context
 ) -> dict[str, Any]:
-    work = data.get("work", {})
-    candidates = work.get("candidates", []) or []
-    if not candidates:
-        return data
-    comments = (data.get("redacted") or {}).get("comments", {})
-    if not comments:
-        comments = (data.get("_internal") or {}).get("redacted_comments", {})
-    if not comments:
-        return data
-    weight = float(step_cfg.get("weight") or 500.0)
-    catalog_weight = float(step_cfg.get("catalog_weight") or 1.0)
-    label_weight = float(step_cfg.get("label_weight") or 0.7)
-    title_weight = float(step_cfg.get("title_weight") or 0.5)
-    media_weight = float(step_cfg.get("media_weight") or 0.4)
-    year_weight = float(step_cfg.get("year_weight") or 0.3)
-
-    for candidate in candidates:
-        if not isinstance(candidate, dict):
-            continue
-        red = candidate.get("redacted") or {}
-        group = red.get("group") or {}
-        torrent = red.get("torrent") or {}
-        ids = candidate.get("_redacted_ids") or {}
-        group_id = ids.get("group_id")
-        if not group_id or group_id not in comments:
-            continue
-        comment_blob = _normalize_release_token(" ".join(comments[group_id]))
-        if not comment_blob:
-            continue
-        score = 0.0
-        matches = []
-
-        catalog = torrent.get("remasterCatalogueNumber") or group.get("catalogueNumber")
-        if catalog:
-            catalog_norm = _normalize_release_token(str(catalog))
-            if catalog_norm and catalog_norm in comment_blob:
-                score += weight * catalog_weight
-                matches.append(f"catalog:{catalog}")
-
-        label = torrent.get("remasterRecordLabel") or group.get("recordLabel")
-        if label:
-            label_norm = _normalize_release_token(str(label))
-            if label_norm and label_norm in comment_blob:
-                score += weight * label_weight
-                matches.append(f"label:{label}")
-
-        remaster_title = torrent.get("remasterTitle")
-        if remaster_title:
-            title_norm = _normalize_release_token(str(remaster_title))
-            if title_norm and title_norm in comment_blob:
-                score += weight * title_weight
-                matches.append(f"title:{remaster_title}")
-
-        media = torrent.get("media")
-        if media:
-            media_norm = _normalize_release_token(str(media))
-            if media_norm and media_norm in comment_blob:
-                score += weight * media_weight
-                matches.append(f"media:{media}")
-
-        year = torrent.get("remasterYear") or group.get("year")
-        if year:
-            year_str = str(year)
-            if year_str in comment_blob:
-                score += weight * year_weight
-                matches.append(f"year:{year}")
-
-        if score:
-            candidate["recommendation"] = {
-                "score": score,
-                "matches": matches,
-            }
-    work["candidates"] = candidates
-    data["work"] = work
+    del step_cfg, context
+    data.setdefault("warnings", []).append(
+        {
+            "step": "apply_recommendations",
+            "type": "PolicyDisabled",
+            "code": "COMMENT_RANKING_DISABLED",
+            "message": (
+                "Comment mentions are not endorsements and cannot alter acquisition ranking."
+            ),
+        }
+    )
     return data
 
 

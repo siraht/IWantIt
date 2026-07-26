@@ -1,154 +1,80 @@
-Redacted Comment Sourcing Plan (Deferred)
+# Redacted Comment Sourcing Plan — Superseded
 
-Purpose
-- Capture decisions, learnings, and the intended implementation so a future pass can resume cleanly.
-- This document is self-contained and does not require reading prior chat history.
+Status: superseded by the Curated Music Sources architecture on 2026-07-26.
 
-Scope
-- Implement automatic comment sourcing from Redacted to heavily weight recommended editions.
-- Use release (torrent group) comments, not per-torrent comments.
-- Use extracted recommendations to influence ranking with a large score boost.
+The former design proposed fetching private Redacted release comments and
+giving editions a large ranking boost when a catalog number, label, medium,
+remaster title, or year appeared in those comments. That design is retired.
+It confused a text mention with endorsement, lacked stance and quote/repost
+context, created an unbounded ranking signal, and placed private curation
+capture in the acquisition executor.
 
-Key Requirements (from product intent)
-- If a user explicitly specifies a version (deluxe/anniversary/etc.), only select matching results.
-- If no explicit version is requested, select best candidate by quality scoring + recommendations.
-- Release priority order: Deluxe > Studio > Anniversary > Live > Bootleg.
-- Comments should be sourced from the release page (torrent group) and parsed across all comment pages.
+## Current decision
 
-Current State (what exists in code)
-- Steps already added in code:
-  - extract_release_preferences
-  - redacted_enrich
-  - redacted_comments
-  - apply_recommendations
-  - filter_by_version
-- redacted_enrich uses Redacted API:
-  - GET /ajax.php?action=torrentgroup&id=<group_id>
-  - Attaches group + torrent metadata to each candidate.
-- apply_recommendations:
-  - Attempts to boost rank when comments mention catalog number, label, media, remaster title, or year.
-- filter_by_version:
-  - If request.explicit_version is true, filters candidates to only those matching user-requested version.
-- decide:
-  - Auto-selects when explicit version is requested and matches exist.
-  - Auto-selects for FLAC > V0 > 320 when those are the only formats left.
-- Release priority scoring added to music quality rules.
+IWantIt does not fetch, persist, export, or rank from private comments.
 
-Redacted API Reality Check
-- The Redacted API endpoint `ajax.php?action=torrentgroup&id=<group_id>` returns only:
-  - response.group
-  - response.torrents
-  - No comments included in the JSON response.
-- This means API key access alone cannot fetch comments.
+- `redacted_comments` remains only as a compatibility step name and returns
+  the `CURATION_BOUNDARY` policy warning without making a request.
+- `apply_recommendations` remains only as a compatibility step name and
+  returns `COMMENT_RANKING_DISABLED` without changing candidate scores.
+- Neither step is present in the default workflow.
+- Session cookies, comment bodies, excerpts, usernames, handles, source URLs,
+  and cached HTML are invalid acquisition-contract data.
 
-Confirmed: Release page HTML (session cookie) required
-- Fetching `https://redacted.sh/torrents.php?id=<group_id>` with a valid session cookie returns HTML.
-- HTML contains comments and page navigation for comments.
-- API key does not permit the HTML endpoint; only an authenticated session cookie does.
+IWantIt may use provider metadata necessary to search for and present an
+explicit acquisition candidate. It must not interpret comments, popularity,
+mention volume, or private community activity as permission, preference,
+identity proof, or acquisition intent.
 
-Session Cookie Approach (deferred)
-- Add to secrets:
-  - redacted.session_cookie
-- Use cookie-based requests to `/torrents.php?id=<group_id>`
-- Parse comment pages from HTML:
-  - Page links look like: torrents.php?page=<N>&id=<group_id>#comments
-- Comments are stored in HTML in tables with class="forum_post" and a div id="content<post_id>".
+## Ownership boundary
 
-Observed HTML structure (example)
-- Comments appear in blocks like:
-  - <table class="forum_post ..." id="post815004">
-  - Inside: <td class="body"> <div id="content815004"> ... </div>
-- The content is plain HTML with nested blockquotes for quoted text.
+Sensemaker owns any future private current-tab capture, observation revision,
+claim extraction, stance review, inbox state, and source-usefulness
+evaluation. Such a feature must satisfy that project's actor scope, retention,
+export, purge, backup-erasure, and connector-policy gates.
 
-Parser Strategy (recommended)
-- Use HTMLParser to extract text from divs with id starting with "content" (excluding preview).
-- Strip nested quotes and preserve text for recommendation extraction.
-- Store as a list of strings per group_id:
-  - data.redacted.comments[group_id] = [comment1, comment2, ...]
+If a comment is captured there:
 
-Pagination Strategy
-- Extract max comment page from HTML using regex:
-  - torrents.php?page=(\d+)&amp;id=<group_id>#comments
-- If max_pages in config is N:
-  - Fetch last N pages (because newer comments often include recommendations)
-- If max_pages = 0 or "all":
-  - Fetch all pages from 1..max.
+- the default stance is `unknown`;
+- quoted or reposted text is distinct from the author's own stance;
+- comment presence alone never makes a candidate eligible or positive;
+- source usefulness can change only from attributable exposure and explicit
+  outcomes with uncertainty and bounded contribution; and
+- raw private evidence stays inside Sensemaker's privacy boundary.
 
-Caching
-- Use cache namespace: redacted_comments
-- Cache per group_id for 1 day (ttl_seconds: 86400) or adjustable.
+Only after the user separately reviews an exact recording/version and invokes
+MetaMusic's explicit acquisition action may MetaMusic form an IWantIt
+acquisition intent. That intent contains the authority-qualified exact ERR
+subject, acquisition constraints, preview choice, and confirmation. It never
+contains the source comment or enough provenance to reconstruct it.
 
-Scoring Rules for Recommendations
-- High-weight scoring that dominates normal quality score.
-- Recommended signals to match in comments:
-  - catalog numbers (highest weight)
-  - record label
-  - remaster title (e.g., “Black Triangle”)
-  - media (CD/Vinyl/SACD)
-  - year
-- Use normalized text matching (lowercase, punctuation stripped).
+## Historical findings retained for context
 
-Explicit Version Handling
-- If user specifies catalog number, label, edition, media, or format:
-  - Filter candidates to only those matching.
-  - Auto-select best-ranked among matches.
-- If nothing matches, return choices instead of auto-select.
+The retired spike established:
 
-Config Shape (intended)
-- redacted:
-  - url
-  - api_key
-  - session_cookie
-  - release_type_map (for release category inference)
-- steps:
-  - redacted_enrich (API)
-  - redacted_comments (HTML fallback)
-  - apply_recommendations
-  - filter_by_version
+- Redacted's JSON torrent-group response does not contain release comments.
+- The HTML release page can contain comments but requires a privileged session
+  cookie.
+- A session cookie has broader account authority than an API key.
+- Parsing nested quotes and pagination is insufficient to determine stance,
+  independence, or personal relevance.
+- Caching raw comments would expand the private-data retention and
+  backup-erasure surface.
 
-Known Gaps / Open Questions
-- Comments are not available via Redacted JSON API; HTML scrape is required.
-- Need to ensure scraping respects rate limits and site terms.
-- Comment HTML parsing needs to remove quoted text to avoid biasing recommendations.
-- Must ensure session cookie is stored securely (secrets.yaml) and redacted in logs.
+These findings are reasons not to implement the old plan in IWantIt. They are
+not instructions to resume cookie-backed scraping.
 
-Suggested Next Implementation Steps
-1) Add session-cookie HTML fetcher for comment pages.
-2) Implement robust HTML comment extraction.
-3) Confirm comment pagination detection against multiple releases.
-4) Add recommendation weighting in rank_releases (already wired).
-5) Validate with “Dark Side of the Moon” and confirm the comment-based recommendation boosts.
+## Reconsideration gate
 
-Testing Plan
-- Use a known release with many comments (e.g., DSOTM group id = 1).
-- Fetch comments with session cookie.
-- Confirm detection of recommended catalog numbers in comments.
-- Verify that candidates matching those recommendations receive large score boosts.
+This decision may be revisited only through a new architecture decision that:
 
-Security Notes
-- Session cookie grants full site access; store only in secrets.yaml.
-- Ensure output JSON redacts cookies if ever surfaced.
-- Avoid saving raw HTML to disk unless explicitly enabled.
+1. keeps capture and ranking outside IWantIt;
+2. demonstrates permitted site-specific access and deletion handling;
+3. separates mention, stance, identity, exposure, outcome, and acquisition;
+4. proves private evidence cannot cross into IWantIt, MetaMusic origins, ERR
+   community evidence, logs, exports, remote inference, or restored backups;
+5. uses a bounded, prospective, exposure-aware evaluation instead of a large
+   heuristic boost; and
+6. retains manual capture as an honest fallback.
 
-Status
-- Comment sourcing is currently disabled in default workflows.
-- redacted_comments + apply_recommendations are still present in code but not wired.
-
-Learnings (from attempted implementation)
-- Redacted JSON API `ajax.php?action=torrentgroup&id=<group_id>` does NOT include comments.
-- HTML release page `/torrents.php?id=<group_id>` DOES include comments but requires a session cookie.
-- API key access cannot fetch the HTML page; it returns: "this page is not yet permitted for API usage".
-- HTML includes comment pagination links (page numbers). Example pattern:
-  - torrents.php?page=<N>&id=<group_id>#comments
-- Comments are stored in tables with class `forum_post` and a div id `content<post_id>`.
-- HTML parsing should target div ids that match `content\d+` (exclude contentpreview).
-- Initial parsing captured too much content; limiting to `content\d+` reduces noise.
-- Pagination detection via regex should parse all page numbers and take max.
-- Fetching all pages for DSOTM is large; limit to the last N pages (configurable) to reduce load.
-
-Next steps (when re-enabled)
-1) Re-enable `redacted_comments` and `apply_recommendations` in the music workflow.
-2) Use session cookie to fetch HTML comments for the release page.
-3) Parse comments (content divs) into text blobs.
-4) Weight recommendations heavily (catalog numbers, labels, media, year).
-5) Add safety: redact session cookie from outputs/logs.
+Until then, the compatibility steps remain fail-safe no-ops.

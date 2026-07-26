@@ -105,14 +105,14 @@ STEP_METADATA: dict[str, dict[str, Any]] = {
     "redacted_comments": {
         "side_effect": False,
         "requires": ["redacted.groups"],
-        "emits": ["redacted.comments|_internal.redacted_comments"],
-        "description": "Fetch Redacted comments.",
+        "emits": ["warnings"],
+        "description": "Deprecated policy boundary; private comment capture is disabled.",
     },
     "apply_recommendations": {
         "side_effect": False,
         "requires": ["work.candidates", "redacted.comments"],
-        "emits": ["work.candidates"],
-        "description": "Boost candidate ranks based on comments.",
+        "emits": ["warnings"],
+        "description": "Deprecated policy boundary; comment text cannot alter acquisition ranking.",
     },
     "filter_by_version": {
         "side_effect": False,
