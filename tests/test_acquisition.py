@@ -205,19 +205,19 @@ class AcquisitionTests(TestCase):
         self.assertEqual(payload["download_url"], "https://provider/file?link=secret")
         self.assertEqual(sanitized["download_url"], "https://provider/file")
 
-    def test_candidate_reference_does_not_hash_access_credentials(self) -> None:
+    def test_candidate_reference_does_not_hash_private_source_urls(self) -> None:
         service = AcquisitionService({}, {})
         first = service._project_candidate(
             {
                 "title": "Track",
-                "info_url": "https://provider/item?id=1&token=first-secret",
+                "info_url": "https://private-one.invalid/item?id=1&token=first-secret",
             },
             0,
         )
         second = service._project_candidate(
             {
                 "title": "Track",
-                "info_url": "https://provider/item?id=1&token=second-secret",
+                "info_url": "https://private-two.invalid/other?id=9&token=second-secret",
             },
             0,
         )

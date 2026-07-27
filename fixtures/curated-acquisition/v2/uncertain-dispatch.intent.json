@@ -18,10 +18,10 @@
     {
       "confirmation": {
         "approved": true,
-        "candidate_ref": "sha256:59e482388e8286e7e36bad786de28bfeca282caba86648e154c637268d164027",
+        "candidate_ref": "sha256:abab77d8782bbd73e0772448a57d3ceb94db07f1de9a7cd845c8a78ed03be04b",
         "confirmation_id": "confirmation-1",
         "confirmed_at": "2026-07-26T18:00:00Z",
-        "preview_result_id": "sha256:d93aa1acf210a24bb2b4788d992c3a9b6c41e257b8fa7873ffa6b17e5c10cdc1"
+        "preview_result_id": "sha256:9e36b1ca9f77d33a166f11dda1db9ca85584fee8bddf3dcba1cdb0862a192cbb"
       },
       "constraints": {
         "allow_substitution": false,
@@ -63,8 +63,8 @@
         "year": 2026
       },
       "selection": {
-        "candidate_ref": "sha256:59e482388e8286e7e36bad786de28bfeca282caba86648e154c637268d164027",
-        "preview_result_id": "sha256:d93aa1acf210a24bb2b4788d992c3a9b6c41e257b8fa7873ffa6b17e5c10cdc1"
+        "candidate_ref": "sha256:abab77d8782bbd73e0772448a57d3ceb94db07f1de9a7cd845c8a78ed03be04b",
+        "preview_result_id": "sha256:9e36b1ca9f77d33a166f11dda1db9ca85584fee8bddf3dcba1cdb0862a192cbb"
       },
       "subject": {
         "authority_id": "xref:authority:01ARZ3NDEKTSV4RRFFQ69G5FAV",

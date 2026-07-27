@@ -47,7 +47,7 @@
             "snatches": null,
             "state": "observed"
           },
-          "candidate_ref": "sha256:59e482388e8286e7e36bad786de28bfeca282caba86648e154c637268d164027",
+          "candidate_ref": "sha256:abab77d8782bbd73e0772448a57d3ceb94db07f1de9a7cd845c8a78ed03be04b",
           "edition": {
             "encoding": null,
             "file_count": null,
@@ -80,7 +80,7 @@
       "dispatch": {},
       "error": null,
       "item_id": "exact",
-      "preview_result_id": "sha256:b2003b530919024a7ce14f1ba75ed26a8742e6856dc9d0bc9eb9b018cc08b283",
+      "preview_result_id": "sha256:dfc10da5797a9d759aff852e2de03c8ed9f2b427d04e33ed944671cd3b586458",
       "selected": null,
       "status": "choice_required",
       "subject": {
@@ -113,7 +113,7 @@
     "provider_payloads_exportable": false,
     "remote_inference_allowed": false
   },
-  "result_id": "sha256:732b9febee49fe42f4e1c5008ac098717ddcba4d9c5c03309611eef7a81dbff1",
+  "result_id": "sha256:97e8ac7f8f97249a67e39b52cc28cf897c78c69c162d186977a862085e1cc173",
   "schema": "iwantit.acquisition-result/2",
   "side_effects_allowed": false,
   "status": "partial"

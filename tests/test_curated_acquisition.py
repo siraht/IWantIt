@@ -606,13 +606,14 @@ class CuratedAcquisitionTests(TestCase):
             "reconciliation_required",
         )
 
-    def test_candidate_reference_ignores_position_and_credentials(self) -> None:
+    def test_candidate_reference_ignores_position_and_private_coordinates(self) -> None:
         first = target_candidate()
         second = target_candidate()
-        second["info_url"] = "https://provider.invalid/item?id=7&token=changed"
+        second["info_url"] = "https://other-private.invalid/other?id=9&token=changed"
         second["_private"]["download_url"] = (
-            "https://provider.invalid/get?id=7&token=changed"
+            "https://other-private.invalid/get?id=9&token=changed"
         )
+        second["_private"]["username"] = "private-peer-handle"
 
         self.assertEqual(candidate_reference(first), candidate_reference(second))
 

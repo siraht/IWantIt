@@ -14,7 +14,7 @@
       },
       "error": null,
       "item_id": "item-1",
-      "preview_result_id": "sha256:a753ba63f4239daec189219ae3abdfb946d5bc3723dab99d96b6a1e860028dfe",
+      "preview_result_id": "sha256:82d962a85b478d0a079b7eb394c973caee938e7783c84706e1084856627ca61d",
       "selected": {
         "availability": {
           "leechers": 2,
@@ -22,7 +22,7 @@
           "snatches": null,
           "state": "observed"
         },
-        "candidate_ref": "sha256:59e482388e8286e7e36bad786de28bfeca282caba86648e154c637268d164027",
+        "candidate_ref": "sha256:abab77d8782bbd73e0772448a57d3ceb94db07f1de9a7cd845c8a78ed03be04b",
         "edition": {
           "encoding": null,
           "file_count": null,
@@ -82,7 +82,7 @@
     "provider_payloads_exportable": false,
     "remote_inference_allowed": false
   },
-  "result_id": "sha256:c08dae7936afaf864d971a2061d091fe819ab9318c7d0ad3ea2a5be6cd5bc4d8",
+  "result_id": "sha256:2eadb65a9837b1aca50fe78ac8e56705f3f88dc9789024efbb49ed8df7e751b4",
   "schema": "iwantit.acquisition-result/2",
   "side_effects_allowed": true,
   "status": "dispatched"

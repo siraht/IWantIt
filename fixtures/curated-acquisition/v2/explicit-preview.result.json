@@ -12,7 +12,7 @@
             "snatches": null,
             "state": "observed"
           },
-          "candidate_ref": "sha256:59e482388e8286e7e36bad786de28bfeca282caba86648e154c637268d164027",
+          "candidate_ref": "sha256:abab77d8782bbd73e0772448a57d3ceb94db07f1de9a7cd845c8a78ed03be04b",
           "edition": {
             "encoding": null,
             "file_count": null,
@@ -45,7 +45,7 @@
       "dispatch": {},
       "error": null,
       "item_id": "item-1",
-      "preview_result_id": "sha256:a753ba63f4239daec189219ae3abdfb946d5bc3723dab99d96b6a1e860028dfe",
+      "preview_result_id": "sha256:82d962a85b478d0a079b7eb394c973caee938e7783c84706e1084856627ca61d",
       "selected": null,
       "status": "choice_required",
       "subject": {
@@ -78,7 +78,7 @@
     "provider_payloads_exportable": false,
     "remote_inference_allowed": false
   },
-  "result_id": "sha256:36fd977ed4f43be1b58fe2827e31d33d2ee2faf6cc80294c15d6a22efbf8366c",
+  "result_id": "sha256:29631b7d74eb3ec7df7327f1c451760c183c7041a582157826b5ef9f2c286a20",
   "schema": "iwantit.acquisition-result/2",
   "side_effects_allowed": false,
   "status": "previewed"

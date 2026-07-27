@@ -5,23 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
-
-_SECRET_QUERY_KEYS = {
-    "api-key",
-    "api_key",
-    "apikey",
-    "auth",
-    "authorization",
-    "cookie",
-    "key",
-    "link",
-    "password",
-    "secret",
-    "sig",
-    "signature",
-    "token",
-}
 
 
 def _first(*values: Any) -> Any:
@@ -36,24 +19,8 @@ def _integer(*values: Any) -> int | None:
         return None
 
 
-def _safe_url(value: Any) -> str | None:
-    if not isinstance(value, str) or not value.startswith(("http://", "https://")):
-        return None
-    try:
-        parsed = urlparse(value)
-        parameters = parse_qsl(parsed.query, keep_blank_values=True)
-        safe = [
-            (key, item)
-            for key, item in parameters
-            if key.lower() not in _SECRET_QUERY_KEYS
-        ]
-        return urlunparse(parsed._replace(query=urlencode(safe), fragment=""))
-    except ValueError:
-        return None
-
-
 def candidate_reference(value: Any) -> str:
-    """Hash stable choice coordinates without provider credentials or private handles."""
+    """Hash only the minimized candidate projection used for an explicit choice."""
 
     candidate = value if isinstance(value, dict) else {"title": str(value)}
     raw = candidate.get("_raw") if isinstance(candidate.get("_raw"), dict) else {}
@@ -75,13 +42,6 @@ def candidate_reference(value: Any) -> str:
         if isinstance(artist_values, list)
         else []
     )
-    source_url = _first(
-        candidate.get("info_url"),
-        candidate.get("infoUrl"),
-        candidate.get("guid"),
-        raw.get("infoUrl"),
-        raw.get("guid"),
-    )
     material = {
         "title": str(
             _first(candidate.get("title"), candidate.get("name"), group.get("name"), "Candidate")
@@ -95,7 +55,6 @@ def candidate_reference(value: Any) -> str:
                 "unknown",
             )
         ),
-        "source_url": _safe_url(source_url),
         "release": {
             "title": str(
                 _first(

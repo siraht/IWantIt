@@ -14,7 +14,7 @@
         "retryable": true
       },
       "item_id": "item-1",
-      "preview_result_id": "sha256:f0ca9a0c341d3685c45b833f920c0ae4c0f4ac50764c36e07eae39553f223012",
+      "preview_result_id": "sha256:5c5af1005301c23b413c8f534c8397a9032954d981eb70a74b16d7d1c63c4c36",
       "selected": null,
       "status": "error",
       "subject": {
@@ -47,7 +47,7 @@
     "provider_payloads_exportable": false,
     "remote_inference_allowed": false
   },
-  "result_id": "sha256:632cc9097c98ab166031366ebe7f403d7d93d457b10ae004def64ee053bbfa19",
+  "result_id": "sha256:57fd7f53699ca43cc89f9a9020fe138ffcea8117a8b7ecc5eb1db7bc3f6b2640",
   "schema": "iwantit.acquisition-result/2",
   "side_effects_allowed": false,
   "status": "refused"
