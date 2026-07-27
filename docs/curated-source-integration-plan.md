@@ -575,7 +575,7 @@ repository.
 | Explicit lifecycle and replay | Complete | preview/choice/unconfirmed refusal/cancel/confirmation/replay/conflict all crossed the real CLI plus loopback HTTP boundary |
 | Failure and recovery matrix | Complete | provider search failure, malformed response, safe pre-request retry, lost response after provider effect, and expired dispatch lease all exercised |
 | X7 privacy sweep | Complete | 42 CLI results plus stderr and 18 journal/WAL/SHM/log/report/cache files scanned for synthetic comments, excerpts, handles, URLs, cookies, credentials, and provider receipts |
-| Current consumer interop | Complete with one upstream finding | MetaMusic HEAD `e5376d75dda9c910ce610d18bd803a7d801162c4` accepted live v2 capabilities/preview; ERR HEAD `ba017cece7edecc1a04332e61b38964242a81fd3` owner schema and MetaMusic artifact verification passed |
+| Current consumer interop | Complete with one upstream finding | MetaMusic HEAD `e5376d75dda9c910ce610d18bd803a7d801162c4` accepted live v2 capabilities/preview; ERR HEAD `610eddc6066b9af1d37036450970dca38b4ceba1` owner schema and MetaMusic artifact verification passed |
 | Full IWantIt gates | Complete | 104 unit tests, functional harness, compileall, fixture verifier, old offline dogfood, fresh adversarial audit, and diff hygiene passed |
 | Landing | Complete | clean-worktree pull/rebase, Beads close/sync, push, prune/fetch, protected-range, and zero-ahead/behind probes passed |
 
@@ -584,7 +584,7 @@ The dated sanitized receipt is
 records 42 checked CLI outcomes, 14 provider searches, three deliberate
 provider effects from three requests, a maximum observed result of 157,567
 bytes, and 18 scanned persistent files. Its SHA-256 is
-`a604225f2d745a3f6aefefdf1b5559fe2e8f4b51f117ac9f9427d7190a6dd4dd`.
+`3e6ea43993432e1be5753be1e33f4a6139c8679cb48ae079f12ae8bcfa7fe606`.
 Every IWantIt-owned scenario passed.
 
 ### Refutations and fixes
