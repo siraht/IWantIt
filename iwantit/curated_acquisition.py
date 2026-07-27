@@ -354,6 +354,14 @@ class CuratedAcquisitionService:
             return None
         if not Draft202012Validator(ERR_SUBJECT_SCHEMA).is_valid(value):
             return None
+        portable_refs = value.get("portable_refs") or []
+        if any(
+            not isinstance(reference, str)
+            or reference.startswith(_NON_PORTABLE_REF_PREFIXES)
+            or "://" in reference
+            for reference in portable_refs
+        ):
+            return None
         return value
 
     def _validate_item(

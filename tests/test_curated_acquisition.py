@@ -351,7 +351,8 @@ class CuratedAcquisitionTests(TestCase):
 
         non_portable = item()
         non_portable["subject"]["portable_refs"] = [
-            "xref:entity:01ARZ3NDEKTSV4RRFFQ69G5FAV"
+            "xref:entity:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "https://private-source.invalid/secret-path",
         ]
 
         cases = (
@@ -378,7 +379,7 @@ class CuratedAcquisitionTests(TestCase):
                 "non_portable",
                 non_portable,
                 "NON_PORTABLE_IDENTITY_EVIDENCE",
-                non_portable["subject"],
+                None,
             ),
         )
 
@@ -395,6 +396,7 @@ class CuratedAcquisitionTests(TestCase):
                     result["items"][0]["subject"],
                     expected_subject,
                 )
+                self.assertNotIn("private-source.invalid", json.dumps(result))
         self.assertEqual(self.runner.calls, [])
 
     def test_private_source_evidence_is_refused_without_echoing_value(self) -> None:
