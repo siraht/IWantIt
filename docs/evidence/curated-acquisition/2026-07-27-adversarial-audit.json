@@ -1,0 +1,63 @@
+{
+  "audit_date": "2026-07-27",
+  "commits": {
+    "err": "ba017cece7edecc1a04332e61b38964242a81fd3",
+    "iwantit": "dee19d3dcc4d605e50cd3befbb2c6b8269510ab9",
+    "metamusic": "e5376d75dda9c910ce610d18bd803a7d801162c4"
+  },
+  "coverage": {
+    "authority_qualified_exact_identity": "passed",
+    "bounded_payload_candidate_and_result_output": "passed",
+    "err_subject_and_pending_artifact_verification_contract": "passed",
+    "idempotent_replay_and_provider_effect_exactly_once": "passed",
+    "ingestion_and_recommendation_never_dispatch": "passed",
+    "metamusic_current_v2_positive_process_interop": "passed",
+    "partial_batch_duplicate_and_malformed_inputs": "passed",
+    "preview_choice_refusal_cancel_confirmation": "passed",
+    "private_evidence_payload_result_journal_log_report_scan": "passed",
+    "provider_errors_safe_retry_and_uncertain_crash_windows": "passed"
+  },
+  "execution": {
+    "boundary": "real iwantit CLI subprocess plus disposable loopback HTTP",
+    "cli_results_checked": 42,
+    "max_observed_result_bytes": 157567,
+    "persistent_files_scanned": 18,
+    "provider_dispatch_requests": 3,
+    "provider_effects": 3,
+    "provider_searches": 14
+  },
+  "limitations": [
+    "No real private provider account or non-loopback network was used.",
+    "Artifact verification exercised MetaMusic's current disposable file/ERR workflow; IWantIt correctly returns only a pending verification requirement and never asserts ownership."
+  ],
+  "metamusic_consumer": {
+    "capability_contract": "iwantit.acquisition-capabilities/1",
+    "positive_contract": "iwantit.acquisition-result/2",
+    "positive_status": "previewed",
+    "typed_refusal_preserved": false
+  },
+  "metamusic_err_artifact_contract": {
+    "passed": 2,
+    "tests": [
+      "tests_vnext/test_acquisition_ingest.py::test_fulfilled_audio_preview_is_write_free_then_registers_exact_bytes",
+      "tests_vnext/test_acquisition_ingest.py::test_fulfillment_refuses_when_err_identity_changes_after_preview"
+    ]
+  },
+  "probes": [
+    ".venv/bin/python scripts/audit_curated_acquisition.py --output <path>",
+    "MetaMusic current AcquisitionCapabilities/AcquisitionResult models over live IWantIt process output",
+    "tests_vnext/test_acquisition_ingest.py::test_fulfilled_audio_preview_is_write_free_then_registers_exact_bytes",
+    "tests_vnext/test_acquisition_ingest.py::test_fulfillment_refuses_when_err_identity_changes_after_preview",
+    "byte comparison: IWantIt err-subject-owner.schema.json == ERR subject-envelope.schema.json"
+  ],
+  "schema": "iwantit.curated-acquisition-adversarial-audit/1",
+  "status": "passed_with_upstream_findings",
+  "upstream_findings": [
+    {
+      "code": "METAMUSIC_IWANTIT_EXIT_1_REJECTED",
+      "fallback": "IWantIt remains fail-closed; MetaMusic should accept exit 1 when stdout validates as iwantit.acquisition-result/2.",
+      "impact": "IWantIt v2 interoperation succeeds for capabilities and positive preview, but MetaMusic's process gateway converts IWantIt's schema-valid exit-1 refusal into GATEWAY_ERROR.",
+      "owner": "MetaMusic"
+    }
+  ]
+}

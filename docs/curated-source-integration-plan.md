@@ -556,3 +556,114 @@ contain only sanitized/offline data.
   `ISA.md`. The final PASS annotation is documentation-only and is landed with
   the same sequence; its self-unrecordable hash is reported in the task
   handoff.
+
+## 2026-07-27 adversarial post-implementation audit
+
+Beads task `iwantit-ztl.6` reopened I0-I4, X6, and IWantIt's X7/privacy
+boundary for independent current-HEAD execution. Prior ISA labels, fixtures,
+tests, and the retained dogfood digest were used only as claim inventory.
+Sensemaker remains the sole central-dossier and coordination-log editor; this
+audit did not edit the shared proposal repository or either consumer
+repository.
+
+### Status and retained evidence
+
+| Subtask | Status | Evidence |
+|---|---|---|
+| Baseline and current contracts | Complete | IWantIt starting HEAD `60c2616702001fc10d6dc171de6f451bb70a0b81`; protected `README.md`, `.agent/`, and `uv.lock` excluded |
+| Exact identity and refusal matrix | Complete | real CLI subprocesses refused bare, malformed, unsupported-version, non-exact, non-recording, and nonportable subjects without provider effects |
+| Explicit lifecycle and replay | Complete | preview/choice/unconfirmed refusal/cancel/confirmation/replay/conflict all crossed the real CLI plus loopback HTTP boundary |
+| Failure and recovery matrix | Complete | provider search failure, malformed response, safe pre-request retry, lost response after provider effect, and expired dispatch lease all exercised |
+| X7 privacy sweep | Complete | 42 CLI results plus stderr and 18 journal/WAL/SHM/log/report/cache files scanned for synthetic comments, excerpts, handles, URLs, cookies, credentials, and provider receipts |
+| Current consumer interop | Complete with one upstream finding | MetaMusic HEAD `e5376d75dda9c910ce610d18bd803a7d801162c4` accepted live v2 capabilities/preview; ERR HEAD `ba017cece7edecc1a04332e61b38964242a81fd3` owner schema and MetaMusic artifact verification passed |
+| Full IWantIt gates | Complete | 104 unit tests, functional harness, compileall, fixture verifier, old offline dogfood, fresh adversarial audit, and diff hygiene passed |
+| Landing | In progress | pull/rebase, Beads close/sync, push, prune/fetch, and zero-ahead/behind probes remain |
+
+The dated sanitized receipt is
+`docs/evidence/curated-acquisition/2026-07-27-adversarial-audit.json`. It
+records 42 checked CLI outcomes, 14 provider searches, three deliberate
+provider effects from three requests, a maximum observed result of 157,567
+bytes, and 18 scanned persistent files. Its SHA-256 is
+`a604225f2d745a3f6aefefdf1b5559fe2e8f4b51f117ac9f9427d7190a6dd4dd`.
+Every IWantIt-owned scenario passed.
+
+### Refutations and fixes
+
+1. `b7a2c3b` — malformed provider arrays could raise `TypeError` while
+   constructing privacy metadata instead of returning a closed typed refusal.
+   Privacy classification now accepts only structurally valid list/string
+   inputs.
+2. `3026f67` — candidate references removed secret query parameters but still
+   hashed the remaining private source URL. References now hash only the
+   minimized choice projection; private URL/handle/credential changes cannot
+   affect the reference. Canonical v2 fixtures were regenerated and current
+   MetaMusic owner-fixture plus process tests passed.
+3. `ab32b20` — a Jackett search HTTP/contract failure was reported as
+   `no_candidates`. An explicit provider failure with no usable candidate now
+   returns retryable `PREVIEW_FAILED`.
+4. `792ad34` — production private adapters did not distinguish a refusal
+   before any request from an uncertain network outcome. Pre-request
+   policy/contract failures now attest `side_effects_possible=false`, enabling
+   stable safe retry; network failures remain uncertain and unretried.
+5. `2d8bc0a` — a rejected but schema-valid ERR subject could echo a
+   nonportable private URL into result/error evidence. Nonportable subjects are
+   now returned as `subject=null`; the canonical refusal fixture was updated.
+6. `dee19d3` — added the independent real-process adversarial audit harness.
+
+The old comment-as-endorsement and large-ranking-boost assumptions remain
+correctly superseded in `docs/redacted_comment_sourcing_plan.md`. The audit
+found no implementation or documentation regression that would justify
+reopening them.
+
+### Exact verification
+
+- `.venv/bin/python -W error::ResourceWarning -m unittest discover -s tests`
+  -> 104 passed.
+- `.venv/bin/python scripts/functional_test.py --verbose` -> functional tests
+  passed.
+- `.venv/bin/python -m compileall -q iwantit scripts tests` -> passed.
+- `.venv/bin/python scripts/verify_curated_acquisition_fixtures.py` -> 5
+  schemas, 51 fixtures, 23 scenarios, 4 replay pairs, status `ok`.
+- `.venv/bin/python scripts/dogfood_curated_acquisition.py --output-dir
+  <temporary-directory>` -> passed; digest
+  `sha256:a21d885f9eb98bbb233aea8ab8760633744995528504f571c66968ad221b1bde`.
+- `.venv/bin/python scripts/audit_curated_acquisition.py --output
+  docs/evidence/curated-acquisition/2026-07-27-adversarial-audit.json` ->
+  `passed_with_upstream_findings`; all IWantIt-owned coverage passed.
+- Current MetaMusic consumer validation over fresh process output passed
+  `iwantit.acquisition-capabilities/1` and
+  `iwantit.acquisition-result/2`.
+- Current MetaMusic disposable artifact/ERR probes
+  `test_fulfilled_audio_preview_is_write_free_then_registers_exact_bytes` and
+  `test_fulfillment_refuses_when_err_identity_changes_after_preview` -> 2
+  passed.
+- IWantIt's embedded ERR subject-owner schema and current ERR
+  `schemas/subject-envelope.schema.json` -> byte-identical.
+- `git diff --check` -> passed.
+
+### Dependency and fallback
+
+Beads bug `iwantit-ztl.7` records the sole upstream defect. MetaMusic's current
+`IWantItProcessGateway` accepts process exits `{0,20,21}` but not exit `1`, so
+it converts IWantIt's schema-valid v2 refusal into generic `GATEWAY_ERROR`
+before validating stdout. Positive v2 capabilities/preview interoperation is
+current and the negative path remains fail-closed; no acquisition is
+dispatched. The MetaMusic-owned unblock is to accept exit `1` only when stdout
+validates as the closed `iwantit.acquisition-result/2` contract. IWantIt does
+not weaken its useful CLI failure exit or edit the consumer repository.
+
+### Lessons
+
+- Redacting query secrets is not enough when the entire source coordinate is
+  private; opaque hashes can still violate a no-private-evidence fingerprint
+  invariant.
+- A typed refusal path must be fuzzed through result construction, not only
+  through schema validation.
+- “No candidates” is an observed provider result, not a synonym for provider
+  failure.
+- Safe retry needs an attestation from the production adapter at the exact
+  pre-request boundary; every post-request network ambiguity must remain
+  uncertain.
+- Positive current v2 consumer interoperation can coexist with a narrower
+  negative exit-code incompatibility; those capability states must be
+  reported separately.
