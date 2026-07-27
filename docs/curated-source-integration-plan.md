@@ -577,7 +577,7 @@ repository.
 | X7 privacy sweep | Complete | 42 CLI results plus stderr and 18 journal/WAL/SHM/log/report/cache files scanned for synthetic comments, excerpts, handles, URLs, cookies, credentials, and provider receipts |
 | Current consumer interop | Complete with one upstream finding | MetaMusic HEAD `e5376d75dda9c910ce610d18bd803a7d801162c4` accepted live v2 capabilities/preview; ERR HEAD `ba017cece7edecc1a04332e61b38964242a81fd3` owner schema and MetaMusic artifact verification passed |
 | Full IWantIt gates | Complete | 104 unit tests, functional harness, compileall, fixture verifier, old offline dogfood, fresh adversarial audit, and diff hygiene passed |
-| Landing | In progress | pull/rebase, Beads close/sync, push, prune/fetch, and zero-ahead/behind probes remain |
+| Landing | Complete | clean-worktree pull/rebase, Beads close/sync, push, prune/fetch, protected-range, and zero-ahead/behind probes passed |
 
 The dated sanitized receipt is
 `docs/evidence/curated-acquisition/2026-07-27-adversarial-audit.json`. It
@@ -667,3 +667,28 @@ not weaken its useful CLI failure exit or edit the consumer repository.
 - Positive current v2 consumer interoperation can coexist with a narrower
   negative exit-code incompatibility; those capability states must be
   reported separately.
+
+### Landing evidence
+
+- Beads `iwantit-ztl.6` closed with all local audit work complete;
+  MetaMusic-owned `iwantit-ztl.7` is deferred with its exact unblock and
+  fail-closed fallback.
+- A clean detached worktree at
+  `4812f7baf3dede5263e63c72c8268ebc727bfce2` ran
+  `git -c core.hooksPath=/dev/null pull --rebase origin master`; output was
+  `HEAD is up to date` and the before/after hashes were identical. The legacy
+  Beads hook still printed its known unsupported `bd hooks` diagnostic, so
+  Beads was probed explicitly rather than treated as silently successful.
+- `bd sync` -> `JSONL is current (hash unchanged since last import)`.
+- `git -c core.hooksPath=/dev/null push origin master` ->
+  `60c2616..4812f7b master -> master`.
+- `git remote prune origin`, `git fetch origin`, and the final probes showed:
+  - local and remote at
+    `4812f7baf3dede5263e63c72c8268ebc727bfce2`;
+  - `git rev-list --left-right --count origin/master...HEAD` -> `0 0`;
+  - no unpushed commits and no stashes;
+  - no protected path in commit range `60c2616..4812f7b`;
+  - only protected `README.md`, `.agent/`, and `uv.lock` remain dirty.
+- This landing annotation is documentation-only and is pushed through the same
+  clean-worktree pull/rebase, `bd sync`, push, prune/fetch, and zero-ahead/
+  behind probes. Its final self-unrecordable hash is reported in the handoff.

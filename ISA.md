@@ -501,11 +501,23 @@ dogfood artifact.
   MetaMusic v2 consumer/artifact probes, ERR schema byte comparison, and
   `git diff --check` all passed.
 
-### ISC-IW-12 — PENDING LANDING
+### ISC-IW-12 — PASS: ledgers, granular commits, and landing
 
-- Beads audit task `iwantit-ztl.6` is in progress and upstream dependency
-  `iwantit-ztl.7` is open with an honest fail-closed fallback.
-- Granular implementation commits through `dee19d3` and this retained
-  evidence are ready for the mandatory clean-worktree pull/rebase, `bd sync`,
-  push, prune/fetch, protected-range, and zero-ahead/behind verification.
-- This criterion remains explicitly pending until those exact probes pass.
+- Beads audit task `iwantit-ztl.6` is closed. External MetaMusic-owned
+  dependency `iwantit-ztl.7` is deferred with the exact unblock and an honest
+  fail-closed fallback.
+- Granular implementation commits are `b7a2c3b`, `3026f67`, `ab32b20`,
+  `792ad34`, `2d8bc0a`, and `dee19d3`; retained evidence/ledger commit is
+  `4812f7b`.
+- A clean detached worktree at
+  `4812f7baf3dede5263e63c72c8268ebc727bfce2` ran the mandatory
+  `git pull --rebase origin master`; it was already current and the hash did
+  not change.
+- `bd sync` reported JSONL current; push advanced
+  `60c2616..4812f7b`; remote prune/fetch passed.
+- Final probes at that landing head showed local=remote, ahead/behind `0 0`,
+  zero unpushed commits, zero stashes, no protected path in the audit commit
+  range, and only protected `README.md`, `.agent/`, and `uv.lock` dirty.
+- This final PASS annotation is documentation-only and uses the identical
+  landing sequence. Its own hash cannot be recorded inside itself and is
+  reported in the final handoff.
