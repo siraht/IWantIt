@@ -118,6 +118,7 @@ def target_candidate() -> dict:
 class Runner:
     def __init__(self) -> None:
         self.calls: list[tuple[dict, bool, bool, int | None]] = []
+        self.fail_preview = False
         self.fail_dispatch_once = False
         self.raise_dispatch_once = False
 
@@ -131,6 +132,19 @@ class Runner:
         self.calls.append((data, dry_run, confirm, choice))
         candidate = target_candidate()
         if dry_run:
+            if self.fail_preview:
+                return {
+                    "work": {"candidates": []},
+                    "search": {
+                        "jackett": {
+                            "query": "Artist Track",
+                            "count": 0,
+                            "error_type": "HTTPError",
+                        }
+                    },
+                    "decision": {"status": "needs_choice", "options": []},
+                    "dispatch": {},
+                }
             return {
                 "run_id": "preview-run",
                 "work": {"candidates": [candidate]},
@@ -234,6 +248,17 @@ class CuratedAcquisitionTests(TestCase):
         serialized = str(result)
         self.assertIsNone(result["items"][0]["candidates"][0]["source_url"])
         self.assertNotIn("download_url", serialized)
+
+    def test_provider_search_error_is_not_reported_as_no_candidates(self) -> None:
+        self.runner.fail_preview = True
+
+        result = self.preview()
+
+        self.assertEqual(result["status"], "refused")
+        self.assertEqual(result["items"][0]["status"], "refused")
+        self.assertEqual(result["items"][0]["error"]["code"], "PREVIEW_FAILED")
+        self.assertTrue(result["items"][0]["error"]["retryable"])
+        self.assertFalse(result["side_effects_allowed"])
 
     def test_confirmed_dispatch_occurs_once_and_replays_across_instances(self) -> None:
         preview = self.preview()

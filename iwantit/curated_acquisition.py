@@ -772,7 +772,19 @@ class CuratedAcquisitionService:
                 ),
                 status="error",
             )
-        if pipeline.get("error") or (pipeline.get("decision") or {}).get("status") == "error":
+        search = pipeline.get("search") if isinstance(pipeline.get("search"), dict) else {}
+        requested_providers = item["constraints"]["sources"]["allowed_providers"]
+        provider_failures = [
+            provider
+            for provider in requested_providers
+            if isinstance(search.get(provider), dict)
+            and search[provider].get("error_type") not in {None, "NotRequested"}
+        ]
+        if (
+            pipeline.get("error")
+            or (pipeline.get("decision") or {}).get("status") == "error"
+            or (provider_failures and not candidates)
+        ):
             result = self._item_error_result(
                 item_id=item["item_id"],
                 subject=item["subject"],
