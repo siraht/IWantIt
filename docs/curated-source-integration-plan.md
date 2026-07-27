@@ -575,7 +575,7 @@ repository.
 | Explicit lifecycle and replay | Complete | preview/choice/unconfirmed refusal/cancel/confirmation/replay/conflict all crossed the real CLI plus loopback HTTP boundary |
 | Failure and recovery matrix | Complete | provider search failure, malformed response, safe pre-request retry, lost response after provider effect, and expired dispatch lease all exercised |
 | X7 privacy sweep | Complete | 42 CLI results plus stderr and 18 journal/WAL/SHM/log/report/cache files scanned for synthetic comments, excerpts, handles, URLs, cookies, credentials, and provider receipts |
-| Current consumer interop | Complete with one upstream finding | MetaMusic HEAD `e5376d75dda9c910ce610d18bd803a7d801162c4` accepted live v2 capabilities/preview; ERR HEAD `610eddc6066b9af1d37036450970dca38b4ceba1` owner schema and MetaMusic artifact verification passed |
+| Current consumer interop | Complete | MetaMusic fix `c3b31a563911370263240b1b6728ed10cd90383f` is present at audited HEAD `6e41b9fed5cf2f9d4c2aa41a9fe803acbabf0d2e`; live v2 capabilities, preview, and exit-1 typed refusals passed. ERR HEAD `75cb8331f531df0724b7a17b6d7bf88ba7464995` owner schema and MetaMusic artifact verification passed |
 | Full IWantIt gates | Complete | 104 unit tests, functional harness, compileall, fixture verifier, old offline dogfood, fresh adversarial audit, and diff hygiene passed |
 | Landing | Complete | clean-worktree pull/rebase, Beads close/sync, push, prune/fetch, protected-range, and zero-ahead/behind probes passed |
 
@@ -584,8 +584,9 @@ The dated sanitized receipt is
 records 42 checked CLI outcomes, 14 provider searches, three deliberate
 provider effects from three requests, a maximum observed result of 157,567
 bytes, and 18 scanned persistent files. Its SHA-256 is
-`3e6ea43993432e1be5753be1e33f4a6139c8679cb48ae079f12ae8bcfa7fe606`.
-Every IWantIt-owned scenario passed.
+`68154f5f574bfbba740fc5ff1fc531ea7c7b8bb26e6c548470e66068d446253c`.
+Every IWantIt-owned scenario passed, `typed_refusal_preserved` is `true`, and
+`upstream_findings` is empty.
 
 ### Refutations and fixes
 
@@ -629,7 +630,8 @@ reopening them.
   `sha256:a21d885f9eb98bbb233aea8ab8760633744995528504f571c66968ad221b1bde`.
 - `.venv/bin/python scripts/audit_curated_acquisition.py --output
   docs/evidence/curated-acquisition/2026-07-27-adversarial-audit.json` ->
-  `passed_with_upstream_findings`; all IWantIt-owned coverage passed.
+  `passed`; 42 CLI outcomes checked, `typed_refusal_preserved=true`, and
+  `upstream_findings=[]`.
 - Current MetaMusic consumer validation over fresh process output passed
   `iwantit.acquisition-capabilities/1` and
   `iwantit.acquisition-result/2`.
@@ -641,16 +643,17 @@ reopening them.
   `schemas/subject-envelope.schema.json` -> byte-identical.
 - `git diff --check` -> passed.
 
-### Dependency and fallback
+### Dependency resolution
 
-Beads bug `iwantit-ztl.7` records the sole upstream defect. MetaMusic's current
-`IWantItProcessGateway` accepts process exits `{0,20,21}` but not exit `1`, so
-it converts IWantIt's schema-valid v2 refusal into generic `GATEWAY_ERROR`
-before validating stdout. Positive v2 capabilities/preview interoperation is
-current and the negative path remains fail-closed; no acquisition is
-dispatched. The MetaMusic-owned unblock is to accept exit `1` only when stdout
-validates as the closed `iwantit.acquisition-result/2` contract. IWantIt does
-not weaken its useful CLI failure exit or edit the consumer repository.
+The earlier audit at MetaMusic
+`e5376d75dda9c910ce610d18bd803a7d801162c4` correctly found that
+`IWantItProcessGateway` converted a schema-valid exit-1 typed refusal to
+generic `GATEWAY_ERROR`. MetaMusic fixed that consumer-owned boundary in
+`c3b31a563911370263240b1b6728ed10cd90383f`. The fresh retained audit against
+MetaMusic `6e41b9fed5cf2f9d4c2aa41a9fe803acbabf0d2e` and ERR
+`75cb8331f531df0724b7a17b6d7bf88ba7464995` preserves the typed refusal,
+passes all 42 CLI outcomes, and reports no upstream findings. Beads bug
+`iwantit-ztl.7` is closed; no fallback or external blocker remains.
 
 ### Lessons
 
@@ -664,15 +667,16 @@ not weaken its useful CLI failure exit or edit the consumer repository.
 - Safe retry needs an attestation from the production adapter at the exact
   pre-request boundary; every post-request network ambiguity must remain
   uncertain.
-- Positive current v2 consumer interoperation can coexist with a narrower
-  negative exit-code incompatibility; those capability states must be
-  reported separately.
+- Positive and negative consumer paths need separate probes: the prior
+  positive-only evidence did not prove typed exit-1 refusals, while the
+  closure audit now proves both.
 
 ### Landing evidence
 
-- Beads `iwantit-ztl.6` closed with all local audit work complete;
-  MetaMusic-owned `iwantit-ztl.7` is deferred with its exact unblock and
-  fail-closed fallback.
+- Beads `iwantit-ztl.6` closed with all local audit work complete. The
+  MetaMusic-owned dependency `iwantit-ztl.7` is also closed after the audit
+  verified fix `c3b31a563911370263240b1b6728ed10cd90383f` at current MetaMusic
+  HEAD `6e41b9fed5cf2f9d4c2aa41a9fe803acbabf0d2e`.
 - A clean detached worktree at
   `4812f7baf3dede5263e63c72c8268ebc727bfce2` ran
   `git -c core.hooksPath=/dev/null pull --rebase origin master`; output was

@@ -470,14 +470,17 @@ dogfood artifact.
 
 - The fixture verifier passed 5 schemas, 51 fixtures, 23 scenarios, and 4
   replay pairs after the privacy/fingerprint fixes.
-- MetaMusic HEAD `e5376d75dda9c910ce610d18bd803a7d801162c4`
-  validated fresh live IWantIt capabilities and preview as v2.
-- ERR HEAD `610eddc6066b9af1d37036450970dca38b4ceba1`
+- MetaMusic fix `c3b31a563911370263240b1b6728ed10cd90383f` is an
+  ancestor of audited HEAD `6e41b9fed5cf2f9d4c2aa41a9fe803acbabf0d2e`.
+  Fresh live IWantIt capabilities, preview, and schema-valid exit-1 typed
+  refusals all validated as v2.
+- ERR HEAD `75cb8331f531df0724b7a17b6d7bf88ba7464995`
   matched the embedded subject schema and its current artifact verification
   contract passed.
-- External limitation: MetaMusic degrades schema-valid exit-1 typed refusals
-  to generic `GATEWAY_ERROR`; Beads `iwantit-ztl.7` records the upstream fix.
-  The fallback remains fail-closed and positive v2 interoperation passes.
+- `.venv/bin/python scripts/audit_curated_acquisition.py --output
+  docs/evidence/curated-acquisition/2026-07-27-adversarial-audit.json` checked
+  42 CLI outcomes and returned `status=passed`,
+  `typed_refusal_preserved=true`, and `upstream_findings=[]`.
 
 #### ISC-IW-09 — PASS: retired comment ranking remains retired
 
@@ -509,9 +512,10 @@ dogfood artifact.
 
 #### ISC-IW-12 — PASS: ledgers, granular commits, and landing
 
-- Beads audit task `iwantit-ztl.6` is closed. External MetaMusic-owned
-  dependency `iwantit-ztl.7` is deferred with the exact unblock and an honest
-  fail-closed fallback.
+- Beads audit task `iwantit-ztl.6` is closed. MetaMusic-owned dependency
+  `iwantit-ztl.7` is closed after direct verification of fix
+  `c3b31a563911370263240b1b6728ed10cd90383f` at current MetaMusic HEAD
+  `6e41b9fed5cf2f9d4c2aa41a9fe803acbabf0d2e`; no external blocker remains.
 - Granular implementation commits are `b7a2c3b`, `3026f67`, `ab32b20`,
   `792ad34`, `2d8bc0a`, and `dee19d3`; retained evidence/ledger commit is
   `4812f7b`.

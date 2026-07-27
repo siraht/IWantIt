@@ -1,9 +1,9 @@
 {
   "audit_date": "2026-07-27",
   "commits": {
-    "err": "610eddc6066b9af1d37036450970dca38b4ceba1",
-    "iwantit": "704d6d3b2f3ce394f660429d2bfea9427fa81c08",
-    "metamusic": "e5376d75dda9c910ce610d18bd803a7d801162c4"
+    "err": "75cb8331f531df0724b7a17b6d7bf88ba7464995",
+    "iwantit": "8659de21ff9edef4c056f9e2d59fa2a28ec3a729",
+    "metamusic": "6e41b9fed5cf2f9d4c2aa41a9fe803acbabf0d2e"
   },
   "coverage": {
     "authority_qualified_exact_identity": "passed",
@@ -34,7 +34,7 @@
     "capability_contract": "iwantit.acquisition-capabilities/1",
     "positive_contract": "iwantit.acquisition-result/2",
     "positive_status": "previewed",
-    "typed_refusal_preserved": false
+    "typed_refusal_preserved": true
   },
   "metamusic_err_artifact_contract": {
     "passed": 2,
@@ -51,13 +51,6 @@
     "byte comparison: IWantIt err-subject-owner.schema.json == ERR subject-envelope.schema.json"
   ],
   "schema": "iwantit.curated-acquisition-adversarial-audit/1",
-  "status": "passed_with_upstream_findings",
-  "upstream_findings": [
-    {
-      "code": "METAMUSIC_IWANTIT_EXIT_1_REJECTED",
-      "fallback": "IWantIt remains fail-closed; MetaMusic should accept exit 1 when stdout validates as iwantit.acquisition-result/2.",
-      "impact": "IWantIt v2 interoperation succeeds for capabilities and positive preview, but MetaMusic's process gateway converts IWantIt's schema-valid exit-1 refusal into GATEWAY_ERROR.",
-      "owner": "MetaMusic"
-    }
-  ]
+  "status": "passed",
+  "upstream_findings": []
 }
