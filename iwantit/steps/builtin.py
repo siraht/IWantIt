@@ -2906,7 +2906,26 @@ def private_source_dispatch(
     try:
         adapter = JackettAdapter(context.config) if provider == "jackett" else SoulseekAdapter(context.config)
         result = adapter.dispatch(selected, idempotency_key=idempotency_key)
-    except (AdapterPolicyError, AdapterContractError, requests.RequestException, ValueError) as exc:
+    except (AdapterPolicyError, AdapterContractError, ValueError) as exc:
+        data.setdefault("dispatch", {})[provider] = {
+            "status": "error",
+            "error_type": exc.__class__.__name__,
+        }
+        data["error"] = {
+            "code": "DISPATCH_PRECONDITION_FAILED",
+            "message": "The provider dispatch was refused before any request was sent.",
+            "retryable": True,
+            "side_effects_possible": False,
+        }
+        data.setdefault("warnings", []).append(
+            {
+                "step": "private_source_dispatch",
+                "type": exc.__class__.__name__,
+                "message": _safe_error_message(exc),
+            }
+        )
+        return data
+    except requests.RequestException as exc:
         data.setdefault("dispatch", {})[provider] = {
             "status": "error",
             "error_type": exc.__class__.__name__,

@@ -16,7 +16,13 @@ from iwantit.private_adapters import (
 )
 from iwantit.registry import iter_active_providers, validate_registry_requirements
 from iwantit.pipeline import Context
-from iwantit.steps.builtin import BUILTINS, dedupe_candidates, filter_candidates, prowlarr_search
+from iwantit.steps.builtin import (
+    BUILTINS,
+    dedupe_candidates,
+    filter_candidates,
+    private_source_dispatch,
+    prowlarr_search,
+)
 
 
 class FakeResponse:
@@ -308,6 +314,31 @@ class PrivateAdapterWorkflowTests(TestCase):
             self.assertEqual(first["status"], "error")
             self.assertEqual(second["status"], "dispatched")
             self.assertEqual(dispatch.call_count, 2)
+
+    def test_dispatch_precondition_failure_attests_no_possible_side_effect(self) -> None:
+        selected = self.candidate()
+        config = self.workflow_config()
+        config["jackett"]["dispatch"] = {}
+        data = {
+            "request": {},
+            "work": {"selected": selected},
+            "acquisition_intent": {
+                "intent_id": "intent-1",
+                "idempotency_key": "key-1",
+                "item_id": "item-1",
+            },
+        }
+
+        result = private_source_dispatch(
+            data,
+            {},
+            Context(config=config, state_path="/tmp", confirm=True),
+        )
+
+        self.assertEqual(result["dispatch"]["jackett"]["status"], "error")
+        self.assertEqual(result["error"]["code"], "DISPATCH_PRECONDITION_FAILED")
+        self.assertTrue(result["error"]["retryable"])
+        self.assertFalse(result["error"]["side_effects_possible"])
 
     def test_exact_version_mismatch_does_not_silently_substitute(self) -> None:
         config = self.workflow_config()
