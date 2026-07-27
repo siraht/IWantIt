@@ -511,6 +511,20 @@ class CuratedAcquisitionTests(TestCase):
         self.assertNotIn("secret-curator-handle", json.dumps(result))
         self.assertEqual(self.runner.calls, [])
 
+    def test_malformed_provider_shape_returns_typed_refusal(self) -> None:
+        malformed = item()
+        malformed["constraints"]["sources"]["allowed_providers"] = [
+            {"bad_shape": "secret-curator-handle"}
+        ]
+
+        result = self.preview(intent(items=[malformed]))
+
+        self.assertEqual(result["status"], "refused")
+        self.assertEqual(result["items"][0]["error"]["code"], "INVALID_ITEM")
+        self.assertFalse(result["side_effects_allowed"])
+        self.assertNotIn("secret-curator-handle", json.dumps(result))
+        self.assertEqual(self.runner.calls, [])
+
     def test_private_evidence_refusal_never_enters_journal(self) -> None:
         private = item()
         private["source_handle"] = "secret-curator-handle"

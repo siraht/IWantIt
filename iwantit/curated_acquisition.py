@@ -1127,7 +1127,8 @@ class CuratedAcquisitionService:
         }
 
     def _privacy(self, intent: dict[str, Any]) -> dict[str, Any]:
-        items = intent.get("items") or []
+        raw_items = intent.get("items")
+        items = raw_items if isinstance(raw_items, list) else []
         requested_private = any(
             ((item.get("constraints") or {}).get("policy") or {}).get("private")
             is True
@@ -1144,6 +1145,7 @@ class CuratedAcquisitionService:
                 )
                 or []
             )
+            if isinstance(provider, str)
         }
         local_private = requested_private or bool(
             requested_sources
